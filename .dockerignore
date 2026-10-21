@@ -1,0 +1,27 @@
+# Git
+.git
+.gitignore
+
+# Dependencias (se instalan dentro de la imagen)
+node_modules
+**/node_modules
+
+# Artefactos de compilación
+dist
+**/dist
+
+# Base de datos local de desarrollo (en producción usa volumen Docker)
+data
+**/data
+*.db
+**/*.db
+
+# Entornos locales (los valores de producción van por docker-compose / .env.docker)
+.env
+**/.env
+.env.docker
+
+# Sistema
+*.log
+Thumbs.db
+.DS_Store

@@ -1,0 +1,530 @@
+import { Hono } from 'hono';
+import { z } from 'zod';
+import { prisma } from '../lib/db.js';
+import { getUser } from '../types/index.js';
+import type {
+  PlanningGridResponse,
+  RecursoGridItem,
+  AsignacionGridItem,
+  ProjectGanttResponse,
+  GanttTaskItem,
+} from '@operaciones-planner/shared';
+
+const planningRoutes = new Hono();
+
+// ============================================
+// HELPERS DE ROLES (decisiones a y b)
+// ============================================
+
+/**
+ * Resuelve el alcance de departamento del usuario actual:
+ * - SUPER_ADMIN: ve todos los departamentos (null)
+ * - ADMIN_DEPTO: ve solo su departamento (vía recurso vinculado o departmentId)
+ * - Otros roles: ve todo (los permisos de edición se aplican en cada endpoint)
+ */
+async function resolveDepartmentScope(c: import('hono').Context): Promise<string | null> {
+  let user: { rol: string; recursoId?: string | null; departmentId?: string | null };
+  try {
+    user = getUser(c) as unknown as typeof user;
+  } catch {
+    return null;
+  }
+  if (!user || user.rol !== 'ADMIN_DEPTO') return null;
+
+  // Prioridad 1: departamento explícito del usuario (decisión b)
+  if (user.departmentId) return user.departmentId;
+
+  // Prioridad 2: departamento del recurso vinculado
+  if (user.recursoId) {
+    const recurso = await prisma.recurso.findUnique({
+      where: { id: user.recursoId },
+      select: { departamentoId: true },
+    });
+    if (recurso) return recurso.departamentoId;
+  }
+  return null;
+}
+
+planningRoutes.get('/grid', async (c) => {
+  try {
+    const query = c.req.query();
+    
+    const params = {
+      fechaInicio: query.fechaInicio,
+      fechaFin: query.fechaFin,
+      departamentoId: query.departamentoId,
+      equipoId: query.equipoId,
+      recursoId: query.recursoId,
+    };
+
+    if (!params.fechaInicio || !params.fechaFin) {
+      return c.json({ error: 'Parámetros fechaInicio y fechaFin son requeridos' }, 400);
+    }
+
+    const fechaInicio = new Date(params.fechaInicio + 'T00:00:00');
+    const fechaFin = new Date(params.fechaFin + 'T23:59:59');
+
+    const whereRecurso: Record<string, unknown> = { activo: true };
+    // Scope por rol: ADMIN_DEPTO solo ve recursos de su departamento (decisión b)
+    const scopeDeptId = await resolveDepartmentScope(c);
+    if (scopeDeptId) whereRecurso.departamentoId = scopeDeptId;
+    if (params.departamentoId) whereRecurso.departamentoId = params.departamentoId;
+    if (params.equipoId) whereRecurso.equipoId = params.equipoId;
+    if (params.recursoId) whereRecurso.id = params.recursoId;
+    if (query.areaId) whereRecurso.areaId = query.areaId;
+
+    const recursos = await prisma.recurso.findMany({
+      where: whereRecurso,
+      include: {
+        departamento: { select: { nombre: true, color: true } },
+        equipo: { select: { nombre: true } },
+        cargo: { select: { nombre: true } },
+        disponibilidades: { where: { activa: true } },
+      },
+      orderBy: [
+        { departamento: { orden: 'asc' } },
+        { equipo: { orden: 'asc' } },
+        { nombre: 'asc' },
+      ],
+    });
+
+    const whereAsignacion: Record<string, unknown> = {
+      fechaInicio: { lte: fechaFin },
+      fechaFin: { gte: fechaInicio },
+      estado: { not: 'CANCELADA' },
+    };
+    if (query.proyectoId) whereAsignacion.proyectoId = query.proyectoId;
+    if (query.tipoActividadId) whereAsignacion.tipoActividadId = query.tipoActividadId;
+    if (query.estado) whereAsignacion.estado = query.estado;
+
+    if (query.clienteId) {
+      whereAsignacion.proyecto = { clienteId: query.clienteId };
+    }
+
+    const asignaciones = await prisma.asignacion.findMany({
+      where: whereAsignacion,
+      include: {
+        proyecto: { select: { id: true, nombre: true, color: true } },
+        tipoActividad: { select: { nombre: true, color: true } },
+      },
+    });
+
+    const recursosGrid: RecursoGridItem[] = recursos.map((r) => {
+      const diasPeriodo = Math.ceil((fechaFin.getTime() - fechaInicio.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+
+      // Si no tiene disponibilidad configurada, asumir jornada estándar 8h x 5 días hábiles
+      const horasDisponiblesSemana = r.disponibilidades.length > 0
+        ? r.disponibilidades.reduce((acc, d) => {
+            const inicio = d.horaInicio.split(':').map(Number);
+            const fin = d.horaFin.split(':').map(Number);
+            return acc + (fin[0] - inicio[0] + (fin[1] - inicio[1]) / 60);
+          }, 0)
+        : 40; // 8h x 5 días hábiles por defecto
+
+      const horasDisponibles = horasDisponiblesSemana * Math.ceil(diasPeriodo / 7);
+
+      // Contar solo las horas DENTRO del rango visible
+      const horasAsignadas = asignaciones
+        .filter((a) => a.recursoId === r.id)
+        .reduce((acc, a) => {
+          const start = a.fechaInicio > fechaInicio ? a.fechaInicio : fechaInicio;
+          const end = a.fechaFin < fechaFin ? a.fechaFin : fechaFin;
+          const dias = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+          let horasPorDia: number;
+          if (a.todoDia) {
+            horasPorDia = 8;
+          } else if (a.horaInicio && a.horaFin) {
+            const [h1, m1] = a.horaInicio.split(':').map(Number);
+            const [h2, m2] = a.horaFin.split(':').map(Number);
+            horasPorDia = Math.max(0, h2 - h1 + (m2 - m1) / 60);
+          } else {
+            horasPorDia = 4;
+          }
+          return acc + dias * horasPorDia;
+        }, 0);
+
+      const porcentajeOcupacion = horasDisponibles > 0 ? Math.round((horasAsignadas / horasDisponibles) * 100) : 0;
+
+      let alerta: RecursoGridItem['disponibilidad']['alerta'] = 'NORMAL';
+      if (porcentajeOcupacion >= 120) alerta = 'SOBRECARGA';
+      else if (porcentajeOcupacion >= 100) alerta = 'SOBRECARGA';
+      else if (porcentajeOcupacion >= 80) alerta = 'ALERTA_80';
+      else if (porcentajeOcupacion === 0) alerta = 'SIN_ASIGNAR';
+
+      return {
+        id: r.id,
+        nombre: r.nombre,
+        apellido: r.apellido ?? undefined,
+        tipo: r.tipo as RecursoGridItem['tipo'],
+        cargoNombre: r.cargo?.nombre,
+        equipoNombre: r.equipo?.nombre,
+        departamentoNombre: r.departamento.nombre,
+        colorCalendario: r.colorCalendario ?? undefined,
+        roleLevel: r.roleLevel ?? 0,
+        areaId: r.areaId ?? undefined,
+        disponibilidad: {
+          porcentajeOcupacion,
+          horasAsignadas: Math.round(horasAsignadas * 10) / 10,
+          horasDisponibles: Math.round(horasDisponibles * 10) / 10,
+          alerta,
+        },
+      };
+    });
+
+    const asignacionesGrid: AsignacionGridItem[] = asignaciones.map((a) => ({
+      id: a.id,
+      recursoId: a.recursoId,
+      proyectoId: a.proyectoId,
+      proyectoNombre: a.proyecto.nombre,
+      proyectoColor: a.proyecto.color ?? undefined,
+      tipoActividadNombre: a.tipoActividad.nombre,
+      tipoActividadColor: a.tipoActividad.color,
+      fechaInicio: a.fechaInicio.toISOString().split('T')[0],
+      fechaFin: a.fechaFin.toISOString().split('T')[0],
+      horaInicio: a.horaInicio ?? undefined,
+      horaFin: a.horaFin ?? undefined,
+      todoDia: a.todoDia,
+      estado: a.estado as AsignacionGridItem['estado'],
+      version: a.version,
+    }));
+
+    const response: PlanningGridResponse = {
+      recursos: recursosGrid,
+      asignaciones: asignacionesGrid,
+      metadata: {
+        fechaInicio: params.fechaInicio,
+        fechaFin: params.fechaFin,
+        totalRecursos: recursosGrid.length,
+        totalAsignaciones: asignacionesGrid.length,
+      },
+    };
+
+    return c.json(response);
+  } catch (error) {
+    console.error('Error in planning/grid:', error);
+    return c.json({ error: 'Internal server error' }, 500);
+  }
+});
+
+planningRoutes.get('/disponibilidad', async (c) => {
+  try {
+    const query = c.req.query();
+    
+    const fechaInicio = new Date((query.fechaInicio ?? '') + 'T00:00:00');
+    const fechaFin = new Date((query.fechaFin ?? '') + 'T23:59:59');
+
+    if (!query.fechaInicio || !query.fechaFin) {
+      return c.json({ error: 'Parámetros fechaInicio y fechaFin son requeridos' }, 400);
+    }
+
+    const whereRecurso: Record<string, unknown> = { activo: true };
+    if (query.departamentoId) whereRecurso.departamentoId = query.departamentoId;
+    if (query.equipoId) whereRecurso.equipoId = query.equipoId;
+    if (query.recursoId) whereRecurso.id = query.recursoId;
+
+    const recursos = await prisma.recurso.findMany({
+      where: whereRecurso,
+      select: {
+        id: true,
+        nombre: true,
+        apellido: true,
+        disponibilidades: { where: { activa: true } },
+        asignaciones: {
+          where: {
+            fechaInicio: { lte: fechaFin },
+            fechaFin: { gte: fechaInicio },
+            estado: { not: 'CANCELADA' },
+          },
+          select: {
+            id: true,
+            fechaInicio: true,
+            fechaFin: true,
+            horaInicio: true,
+            horaFin: true,
+            todoDia: true,
+          },
+        },
+      },
+    });
+
+    const disponibilidadData = recursos.map((r) => {
+      // Jornada por defecto si no hay disponibilidad configurada
+      const horasDisponiblesPorDia = r.disponibilidades.length > 0
+        ? r.disponibilidades.reduce((acc, d) => {
+            const inicio = d.horaInicio.split(':').map(Number);
+            const fin = d.horaFin.split(':').map(Number);
+            return acc + (fin[0] - inicio[0] + (fin[1] - inicio[1]) / 60);
+          }, 0)
+        : 8;
+
+      const diasPeriodo = Math.ceil((fechaFin.getTime() - fechaInicio.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+      const horasDisponiblesTotal = horasDisponiblesPorDia * Math.ceil(diasPeriodo / 7);
+
+      const horasAsignadas = r.asignaciones.reduce((acc, a) => {
+        const start = a.fechaInicio > fechaInicio ? a.fechaInicio : fechaInicio;
+        const end = a.fechaFin < fechaFin ? a.fechaFin : fechaFin;
+        const dias = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+        return acc + dias * (a.todoDia ? 8 : 4);
+      }, 0);
+
+      return {
+        recursoId: r.id,
+        nombre: r.apellido ? `${r.nombre} ${r.apellido}` : r.nombre,
+        horasDisponibles: Math.round(horasDisponiblesTotal * 10) / 10,
+        horasAsignadas: Math.round(horasAsignadas * 10) / 10,
+        porcentajeOcupacion: horasDisponiblesTotal > 0 ? Math.round((horasAsignadas / horasDisponiblesTotal) * 100) : 0,
+      };
+    });
+
+    return c.json({
+      periodo: { desde: query.fechaInicio, hasta: query.fechaFin },
+      recursos: disponibilidadData,
+    });
+  } catch (error) {
+    console.error('Error in planning/disponibilidad:', error);
+    return c.json({ error: 'Internal server error' }, 500);
+  }
+});
+
+// ============================================
+// GANTT — Vista tipo MS Project (decisión d)
+// ============================================
+
+function parseDependencies(raw: string | null | undefined): string[] {
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) return parsed.filter((d) => typeof d === 'string');
+    return [];
+  } catch {
+    return [];
+  }
+}
+
+function toISODate(d: Date): string {
+  return d.toISOString().split('T')[0];
+}
+
+planningRoutes.get('/gantt', async (c) => {
+  try {
+    const query = c.req.query();
+
+    if (!query.fechaInicio || !query.fechaFin) {
+      return c.json({ error: 'Parámetros fechaInicio y fechaFin son requeridos' }, 400);
+    }
+
+    const fechaInicio = new Date(query.fechaInicio + 'T00:00:00');
+    const fechaFin = new Date(query.fechaFin + 'T23:59:59');
+
+    const whereProyecto: Record<string, unknown> = { activo: true };
+    if (query.proyectoId) whereProyecto.id = query.proyectoId;
+    if (query.clienteId) whereProyecto.clienteId = query.clienteId;
+
+    const proyectos = await prisma.proyecto.findMany({
+      where: whereProyecto,
+      include: {
+        cliente: { select: { nombre: true } },
+        subproyectos: { select: { id: true } },
+        asignaciones: {
+          where: {
+            fechaInicio: { lte: fechaFin },
+            fechaFin: { gte: fechaInicio },
+            estado: { not: 'CANCELADA' },
+          },
+          include: {
+            recurso: { select: { nombre: true, apellido: true } },
+            tipoActividad: { select: { nombre: true, color: true } },
+          },
+          orderBy: { fechaInicio: 'asc' },
+        },
+      },
+      orderBy: [{ subprojectId: 'asc' }, { nombre: 'asc' }],
+    });
+
+    const totalAsignaciones = proyectos.reduce((acc, p) => acc + p.asignaciones.length, 0);
+
+    // ===== Construir tareas (proyecto con roll-up de asignaciones) =====
+    const projectTasks = new Map<string, GanttTaskItem>();
+    const assignmentTasks: GanttTaskItem[] = [];
+
+    proyectos.forEach((p) => {
+      const asignaciones = p.asignaciones;
+
+      // Roll-up: scheduledStart/End explícitos > min/max asignaciones > fechaInicio/Fin
+      let start = p.scheduledStart;
+      let end = p.scheduledEnd;
+      if ((!start || !end) && asignaciones.length > 0) {
+        const minAsig = asignaciones.reduce(
+          (min, a) => (a.fechaInicio < min ? a.fechaInicio : min),
+          asignaciones[0].fechaInicio
+        );
+        const maxAsig = asignaciones.reduce(
+          (max, a) => (a.fechaFin > max ? a.fechaFin : max),
+          asignaciones[0].fechaFin
+        );
+        if (!start) start = minAsig;
+        if (!end) end = maxAsig;
+      }
+      if (!start) start = p.fechaInicio ?? fechaInicio;
+      if (!end) end = p.fechaFin ?? fechaFin;
+      if (end < start) end = start;
+
+      // Avance: explícito > promedio por estado de asignaciones
+      let percent = p.percentComplete ?? null;
+      if (percent === null) {
+        if (asignaciones.length > 0) {
+          const sum = asignaciones.reduce((acc, a) => {
+            if (a.estado === 'COMPLETADA') return acc + 100;
+            if (a.estado === 'EN_CURSO') return acc + 50;
+            return acc;
+          }, 0);
+          percent = Math.round(sum / asignaciones.length);
+        } else {
+          percent = p.estado === 'FINALIZADO' ? 100 : 0;
+        }
+      }
+
+      projectTasks.set(p.id, {
+        id: p.id,
+        tipo: 'PROYECTO',
+        proyectoId: p.id,
+        nombre: p.nombre,
+        fechaInicio: toISODate(start),
+        fechaFin: toISODate(end),
+        percentComplete: percent,
+        color: p.color ?? undefined,
+        parentId: p.subprojectId ?? undefined,
+        dependencies: parseDependencies(p.dependencies),
+        // Roll-up de recursos asignados (únicos, unidos por coma)
+        recursos:
+          [...new Set(asignaciones.map((a) => (a.recurso.apellido ? `${a.recurso.nombre} ${a.recurso.apellido}` : a.recurso.nombre)))].join(', ') ||
+          undefined,
+        notas: p.descripcion ?? undefined,
+        estado: p.estado as GanttTaskItem['estado'],
+        esCritica: false,
+      });
+
+      // Filas hijas: una por asignación
+      asignaciones.forEach((a) => {
+        const visInicio = a.fechaInicio < fechaInicio ? fechaInicio : a.fechaInicio;
+        const visFin = a.fechaFin > fechaFin ? fechaFin : a.fechaFin;
+        assignmentTasks.push({
+          id: `asig-${a.id}`,
+          tipo: 'ASIGNACION',
+          proyectoId: p.id,
+          nombre: `${a.tipoActividad.nombre}`,
+          fechaInicio: toISODate(visInicio),
+          fechaFin: toISODate(visFin),
+          percentComplete:
+            a.estado === 'COMPLETADA' ? 100 : a.estado === 'EN_CURSO' ? 50 : 0,
+          color: a.tipoActividad.color,
+          parentId: p.id,
+          dependencies: [],
+          recursos: a.recurso.apellido
+            ? `${a.recurso.nombre} ${a.recurso.apellido}`
+            : a.recurso.nombre,
+          notas: a.notas ?? undefined,
+          estado: a.estado as GanttTaskItem['estado'],
+          esCritica: false,
+        });
+      });
+    });
+
+    // ===== Ruta crítica (solo entre proyectos, fin→inicio) =====
+    // Forward pass: ES/EF por orden topológico implícito (iterativo)
+    const es = new Map<string, number>(); // earliest start (ms)
+    const ef = new Map<string, number>(); // earliest finish (ms)
+    const duration = new Map<string, number>();
+    projectTasks.forEach((t) => {
+      const s = new Date(t.fechaInicio + 'T00:00:00').getTime();
+      const e = new Date(t.fechaFin + 'T00:00:00').getTime();
+      duration.set(t.id, Math.max(e - s, 0));
+      es.set(t.id, s);
+      ef.set(t.id, e);
+    });
+    // Iterar hasta estabilizar (dependencias entre proyectos)
+    for (let i = 0; i < projectTasks.size; i++) {
+      let changed = false;
+      projectTasks.forEach((t) => {
+        for (const depId of t.dependencies) {
+          if (!ef.has(depId)) continue;
+          const newEs = Math.max(es.get(t.id)!, ef.get(depId)! + 86400000); // FS + 1 día
+          if (newEs > es.get(t.id)!) {
+            es.set(t.id, newEs);
+            ef.set(t.id, newEs + duration.get(t.id)!);
+            changed = true;
+          }
+        }
+      });
+      if (!changed) break;
+    }
+    const projectEnd = Math.max(...Array.from(ef.values()), 0);
+    // Backward pass: LF/LS
+    const lf = new Map<string, number>();
+    const ls = new Map<string, number>();
+    projectTasks.forEach((t) => {
+      lf.set(t.id, projectEnd);
+      ls.set(t.id, projectEnd - duration.get(t.id)!);
+    });
+    for (let i = 0; i < projectTasks.size; i++) {
+      let changed = false;
+      projectTasks.forEach((t) => {
+        for (const depId of t.dependencies) {
+          if (!projectTasks.has(depId)) continue;
+          const newLf = ls.get(t.id)! - 86400000; // FS + 1 día
+          if (newLf < lf.get(depId)!) {
+            lf.set(depId, newLf);
+            ls.set(depId, newLf - duration.get(depId)!);
+            changed = true;
+          }
+        }
+      });
+      if (!changed) break;
+    }
+    // Crítica: holgura 0
+    projectTasks.forEach((t) => {
+      const slack = ls.get(t.id)! - es.get(t.id)!;
+      t.esCritica = slack <= 0 && projectEnd > 0;
+    });
+
+    // ===== Ordenar: proyectos (padres antes que subproyectos) y sus asignaciones =====
+    const ordered: GanttTaskItem[] = [];
+    const emitProject = (id: string, depth = 0) => {
+      if (depth > 10) return; // protección contra ciclos
+      const task = projectTasks.get(id);
+      if (!task || (ordered as GanttTaskItem[]).includes(task)) return;
+      ordered.push(task);
+      // Asignaciones del proyecto
+      assignmentTasks
+        .filter((a) => a.parentId === id)
+        .forEach((a) => ordered.push(a));
+      // Subproyectos
+      proyectos
+        .filter((p) => p.subprojectId === id)
+        .forEach((child) => emitProject(child.id, depth + 1));
+    };
+    // Raíces primero (proyectos sin padre)
+    proyectos.filter((p) => !p.subprojectId).forEach((p) => emitProject(p.id));
+    // Huérfanos por seguridad (padre fuera del resultado)
+    proyectos
+      .filter((p) => p.subprojectId && !projectTasks.has(p.subprojectId))
+      .forEach((p) => emitProject(p.id));
+
+    const response: ProjectGanttResponse = {
+      tareas: ordered,
+      metadata: {
+        fechaInicio: query.fechaInicio,
+        fechaFin: query.fechaFin,
+        totalProyectos: projectTasks.size,
+        totalAsignaciones,
+      },
+    };
+
+    return c.json(response);
+  } catch (error) {
+    console.error('Error in planning/gantt:', error);
+    return c.json({ error: 'Internal server error' }, 500);
+  }
+});
+
+export { planningRoutes };

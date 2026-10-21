@@ -1,0 +1,54 @@
+# ============================================
+# Operaciones Planner — Producción (servidor empresa 192.168.25.7)
+#
+# Uso (en el servidor, dentro de la carpeta del proyecto):
+#   docker compose up -d --build
+#
+# La base de datos es SQLite en el volumen "db_data" (persistente).
+# Backup: docker run --rm -v operaciones-planner_db_data:/data -v ${PWD}:/backup alpine cp /data/operaciones.db /backup/
+# ============================================
+name: operaciones-planner
+
+services:
+  # ----------------------------
+  # Backend (API Hono + Prisma + Better-Auth)
+  # ----------------------------
+  backend:
+    build:
+      context: .
+      dockerfile: packages/backend/Dockerfile
+    container_name: operaciones-backend
+    restart: unless-stopped
+    env_file:
+      - .env.docker
+    environment:
+      NODE_ENV: production
+      PORT: "3001"
+      # SQLite en volumen persistente (mismo motor que desarrollo: cero cambios de esquema)
+      DATABASE_URL: file:/app/data/operaciones.db
+      # Origen visible desde el navegador (el frontend entra por nginx en :5173)
+      BETTER_AUTH_URL: http://192.168.25.7:5173
+      CORS_ORIGIN: http://192.168.25.7:5173
+      # Orígenes que Better-Auth acepta para login (separados por coma)
+      TRUSTED_ORIGINS: http://192.168.25.7:5173,http://192.168.25.7:3001,http://localhost:5173,http://localhost:3001
+    volumes:
+      - db_data:/app/data
+    ports:
+      - "3001:3001"
+
+  # ----------------------------
+  # Frontend (React compilado servido por nginx + proxy /api)
+  # ----------------------------
+  frontend:
+    build:
+      context: .
+      dockerfile: packages/frontend/Dockerfile
+    container_name: operaciones-frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "5173:80"
+
+volumes:
+  db_data:

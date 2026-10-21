@@ -1,0 +1,36 @@
+{
+  "name": "operaciones-planner",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Aplicación web para planificación y gestión de recursos de Operaciones",
+  "scripts": {
+    "dev": "concurrently -n \"frontend,backend\" -c \"cyan,magenta\" \"pnpm --filter frontend dev\" \"pnpm --filter backend dev\"",
+    "build": "pnpm --filter backend build && pnpm --filter frontend build",
+    "test": "pnpm --filter frontend test && pnpm --filter backend test",
+    "lint": "pnpm --filter frontend lint && pnpm --filter backend lint",
+    "docker:build": "docker compose build",
+    "docker:up": "docker compose up -d --build",
+    "docker:down": "docker compose down",
+    "docker:logs": "docker compose logs -f backend frontend",
+    "db:migrate": "cd packages/backend && pnpm prisma migrate dev",
+    "db:push": "cd packages/backend && pnpm prisma db push",
+    "db:generate": "cd packages/backend && pnpm prisma generate",
+    "db:studio": "cd packages/backend && pnpm prisma studio",
+    "db:seed": "cd packages/backend && pnpm ts-node prisma/seed.ts"
+  },
+  "devDependencies": {
+    "concurrently": "^9.0.0"
+  },
+  "pnpm": {
+    "allowBuilds": [
+      "@prisma/client",
+      "@prisma/engines",
+      "esbuild",
+      "prisma"
+    ]
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "pnpm": ">=9.0.0"
+  }
+}

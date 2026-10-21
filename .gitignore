@@ -1,0 +1,25 @@
+# Dependencias
+node_modules/
+**/node_modules/
+
+# Artefactos de compilación
+dist/
+**/dist/
+
+# Base de datos local (SQLite)
+*.db
+*.db-journal
+packages/backend/prisma/data/
+
+# Entornos con secretos
+.env
+.env.local
+.env.docker
+**/.env
+
+# Sistema / editor
+*.log
+Thumbs.db
+.DS_Store
+.vscode/
+.idea/

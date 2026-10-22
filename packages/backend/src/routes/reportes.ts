@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { prisma } from '../lib/db.js';
 import { getUser } from '../types/index.js';
-import type { CargaTrabajoResumen, OcupacionProyectoResumen } from '@operaciones-planner/shared';
+import type { CargaTrabajoResumen, OcupacionProyectoResumen, ProximosVencerAsignacion, ProximosVencerProyecto } from '@operaciones-planner/shared';
 
 const reportesRoutes = new Hono();
 
@@ -237,6 +237,69 @@ reportesRoutes.get('/carga-equipos', async (c) => {
     periodo: { desde, hasta },
     totalEquipos: resultados.length,
     equipos: resultados,
+  });
+});
+
+// Próximos a vencer: asignaciones y proyectos activos que terminan dentro de N días
+reportesRoutes.get('/proximos-vencer', async (c) => {
+  const dias = Math.min(365, Math.max(1, Number(c.req.query('dias') ?? 30) || 30));
+
+  const hoy = new Date();
+  hoy.setHours(0, 0, 0, 0);
+  const limite = new Date(hoy.getTime() + dias * 86400000);
+  limite.setHours(23, 59, 59, 999);
+
+  const asignaciones = await prisma.asignacion.findMany({
+    where: {
+      fechaFin: { gte: hoy, lte: limite },
+      estado: { notIn: ['CANCELADA', 'COMPLETADA'] },
+    },
+    include: {
+      proyecto: { select: { nombre: true, color: true, estado: true } },
+      recurso: { select: { nombre: true, apellido: true } },
+      tipoActividad: { select: { nombre: true, color: true } },
+    },
+    orderBy: { fechaFin: 'asc' },
+    take: 200,
+  });
+
+  const proyectos = await prisma.proyecto.findMany({
+    where: {
+      activo: true,
+      fechaFin: { gte: hoy, lte: limite },
+      estado: { in: ['PLANIFICACION', 'ACTIVO', 'EN_PAUSA'] },
+    },
+    include: { cliente: { select: { nombre: true } } },
+    orderBy: { fechaFin: 'asc' },
+  });
+
+  return c.json({
+    dias,
+    asignaciones: asignaciones.map((a) => ({
+      id: a.id,
+      tipo: 'ASIGNACION' as const,
+      nombre: a.tipoActividad.nombre,
+      proyectoNombre: a.proyecto.nombre,
+      proyectoColor: a.proyecto.color ?? a.tipoActividad.color,
+      recurso: a.recurso.apellido
+        ? `${a.recurso.nombre} ${a.recurso.apellido}`
+        : a.recurso.nombre,
+      fechaFin: a.fechaFin.toISOString().split('T')[0],
+      diasRestantes: Math.ceil((a.fechaFin.getTime() - hoy.getTime()) / 86400000),
+      estado: a.estado as ProximosVencerAsignacion['estado'],
+    })),
+    proyectos: proyectos.map((p) => ({
+      id: p.id,
+      nombre: p.nombre,
+      cliente: p.cliente?.nombre,
+      estado: p.estado as ProximosVencerProyecto['estado'],
+      fechaInicio: p.fechaInicio?.toISOString().split('T')[0],
+      fechaFin: p.fechaFin?.toISOString().split('T')[0],
+      percentComplete: Math.round(p.percentComplete ?? 0),
+      diasRestantes: p.fechaFin
+        ? Math.ceil((p.fechaFin.getTime() - hoy.getTime()) / 86400000)
+        : 0,
+    })),
   });
 });
 

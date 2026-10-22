@@ -499,3 +499,43 @@ export interface OcupacionProyectoResumen {
   horasTotales: number;
   horasPorRecurso: { recursoId: string; nombre: string; horas: number }[];
 }
+
+export interface CargaEquipoResumen {
+  equipoId: string;
+  equipoNombre: string;
+  departamentoNombre?: string;
+  totalRecursos: number;
+  horasAsignadas: number;
+  horasDisponibles: number;
+  porcentajeOcupacion: number;
+  recursosSinAsignar: number;
+}
+
+export interface ProximosVencerAsignacion {
+  id: string;
+  tipo: 'ASIGNACION';
+  nombre: string;
+  proyectoNombre: string;
+  proyectoColor?: string;
+  recurso: string;
+  fechaFin: string;
+  diasRestantes: number;
+  estado: AsignacionEstado;
+}
+
+export interface ProximosVencerProyecto {
+  id: string;
+  nombre: string;
+  cliente?: string;
+  estado: ProyectoEstado;
+  fechaInicio?: string;
+  fechaFin?: string;
+  percentComplete: number;
+  diasRestantes: number;
+}
+
+export interface ProximosVencerResponse {
+  dias: number;
+  asignaciones: ProximosVencerAsignacion[];
+  proyectos: ProximosVencerProyecto[];
+}

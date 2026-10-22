@@ -16,6 +16,10 @@ import type {
   Actividad,
   Tarea,
   Subtarea,
+  CargaTrabajoResumen,
+  OcupacionProyectoResumen,
+  CargaEquipoResumen,
+  ProximosVencerResponse,
 } from '@operaciones-planner/shared';
 
 // ============================================
@@ -568,6 +572,50 @@ export function useAsignarRecursoUsuario() {
     mutationFn: ({ userId, recursoId }: { userId: string; recursoId: string | null }) =>
       api.put(`/api/usuarios/${userId}/recurso`, { recursoId }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['usuarios'] }),
+  });
+}
+
+// ============================================
+// REPORTES
+// ============================================
+
+export function useReporteUtilizacion(desde: string, hasta: string) {
+  return useQuery({
+    queryKey: ['reporte-utilizacion', desde, hasta],
+    queryFn: () =>
+      api.get<{ periodo: { desde: string; hasta: string }; totalRecursos: number; recursos: CargaTrabajoResumen[] }>(
+        `/api/reportes/utilizacion-recursos?desde=${desde}&hasta=${hasta}`
+      ),
+    enabled: !!desde && !!hasta,
+  });
+}
+
+export function useReporteOcupacionProyectos(desde: string, hasta: string) {
+  return useQuery({
+    queryKey: ['reporte-ocupacion', desde, hasta],
+    queryFn: () =>
+      api.get<{ periodo: { desde: string; hasta: string }; totalProyectos: number; proyectos: OcupacionProyectoResumen[] }>(
+        `/api/reportes/ocupacion-proyectos?desde=${desde}&hasta=${hasta}`
+      ),
+    enabled: !!desde && !!hasta,
+  });
+}
+
+export function useReporteCargaEquipos(desde: string, hasta: string) {
+  return useQuery({
+    queryKey: ['reporte-equipos', desde, hasta],
+    queryFn: () =>
+      api.get<{ periodo: { desde: string; hasta: string }; totalEquipos: number; equipos: CargaEquipoResumen[] }>(
+        `/api/reportes/carga-equipos?desde=${desde}&hasta=${hasta}`
+      ),
+    enabled: !!desde && !!hasta,
+  });
+}
+
+export function useReporteProximosVencer(dias: number) {
+  return useQuery({
+    queryKey: ['reporte-proximos-vencer', dias],
+    queryFn: () => api.get<ProximosVencerResponse>(`/api/reportes/proximos-vencer?dias=${dias}`),
   });
 }
 

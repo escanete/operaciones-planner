@@ -463,36 +463,25 @@ export function ProjectGanttView({
 
   // Filas con indentación por jerarquía y posición para flechas
   const rows = useMemo(() => {
-    // Profundidad por proyecto (subproyectos indentados)
+    // Profundidad genérica: proyecto→actividad→tarea y asignaciones bajo el proyecto.
+    // El backend emite las filas en orden jerárquico, así que una pasada basta.
     const depthMap = new Map<string, number>();
-    let guard = 0;
-    let changed = true;
-    while (changed && guard < 50) {
-      changed = false;
-      guard++;
-      tareas.forEach((t) => {
-        if (t.tipo !== 'PROYECTO') return;
-        if (!t.parentId) {
-          if (depthMap.get(t.id) !== 0) {
-            depthMap.set(t.id, 0);
-            changed = true;
-          }
-        } else if (depthMap.has(t.parentId)) {
-          const d = depthMap.get(t.parentId)! + 1;
-          if (depthMap.get(t.id) !== d) {
-            depthMap.set(t.id, d);
-            changed = true;
-          }
-        }
-      });
-    }
+    tareas.forEach((t) => {
+      if (t.tipo === 'PROYECTO') {
+        depthMap.set(t.id, t.parentId ? (depthMap.get(t.parentId) ?? 0) + 1 : 0);
+      } else if (t.tipo === 'ASIGNACION') {
+        depthMap.set(t.id, (depthMap.get(t.proyectoId) ?? 0) + 1);
+      } else {
+        // ACTIVIDAD (padre=proyecto) y TAREA (padre=actividad)
+        const parentDepth = t.parentId ? depthMap.get(t.parentId) : 0;
+        depthMap.set(t.id, (parentDepth ?? 0) + 1);
+      }
+    });
     return tareas.map((t, index) => ({
       tarea: t,
       index,
-      depth: t.tipo === 'PROYECTO' ? depthMap.get(t.id) ?? 0 : 1,
-      tieneHijos:
-        t.tipo === 'PROYECTO' &&
-        tareas.some((o) => o.parentId === t.id),
+      depth: depthMap.get(t.id) ?? 0,
+      tieneHijos: tareas.some((o) => o.parentId === t.id),
     }));
   }, [tareas]);
 
@@ -676,8 +665,22 @@ function GanttRow({
   );
 
   const esProyecto = tarea.tipo === 'PROYECTO';
+  const esResumen = esProyecto || tarea.tipo === 'ACTIVIDAD';
   const esSubproyecto = esProyecto && !!tarea.parentId;
-  const barColor = tarea.color ?? (esProyecto ? '#334155' : '#64748b');
+  const barColor =
+    tarea.color ??
+    (tarea.tipo === 'PROYECTO'
+      ? '#334155'
+      : tarea.tipo === 'ACTIVIDAD'
+      ? '#475569'
+      : tarea.tipo === 'TAREA'
+      ? '#64748b'
+      : '#94a3b8');
+  // Geometría de barra por nivel
+  const barTop =
+    tarea.tipo === 'PROYECTO' ? 12 : tarea.tipo === 'ACTIVIDAD' ? 13 : tarea.tipo === 'TAREA' ? 15 : 13;
+  const barHeight =
+    tarea.tipo === 'PROYECTO' ? 12 : tarea.tipo === 'ACTIVIDAD' ? 10 : tarea.tipo === 'TAREA' ? 7 : 10;
 
   const commitPercent = () => {
     setEditingPercent(false);
@@ -697,6 +700,14 @@ function GanttRow({
       : tarea.estado === 'CANCELADA'
       ? 'destructive'
       : 'outline';
+
+  // Estado derivado para filas del WBS (actividades/tareas no tienen estado propio)
+  const esWBS = tarea.tipo === 'ACTIVIDAD' || tarea.tipo === 'TAREA';
+  const estadoLabel = tarea.estado ?? (tarea.percentComplete >= 100
+    ? 'COMPLETADA'
+    : tarea.percentComplete > 0
+    ? 'EN_CURSO'
+    : 'PENDIENTE');
 
   return (
     <div className="flex border-b" style={{ height: GANTT_ROW_HEIGHT }}>
@@ -738,6 +749,11 @@ function GanttRow({
                 </span>
               )}
             </>
+          ) : tarea.tipo === 'ACTIVIDAD' ? (
+            <span className="truncate text-sm font-semibold leading-tight">
+              {'▸ '}
+              {tarea.nombre}
+            </span>
           ) : (
             <span className="truncate text-xs leading-tight text-muted-foreground">
               {'· '}
@@ -752,7 +768,7 @@ function GanttRow({
           style={{ width: GANTT_COLS.estado }}
         >
           <Badge variant={estadoVariant} className="truncate px-1.5 py-0 text-[9px]">
-            {tarea.estado ?? '-'}
+            {esWBS ? estadoLabel : (tarea.estado ?? '-')}
           </Badge>
         </div>
 
@@ -889,8 +905,8 @@ function GanttRow({
           style={{
             left: startOffset * cellWidth + 1,
             width: spanDias * cellWidth - 2,
-            top: esProyecto ? 12 : 13,
-            height: esProyecto ? (tieneHijos ? 10 : 12) : 10,
+            top: barTop,
+            height: barHeight,
             backgroundColor: barColor,
             zIndex: 10,
           }}
@@ -906,7 +922,7 @@ function GanttRow({
             }}
           />
           {/* Terminales de barra resumen (estilo MS Project) */}
-          {esProyecto && tieneHijos && (
+          {esResumen && tieneHijos && (
             <>
               <span
                 className="absolute left-0 top-1/2 -translate-y-1/2"

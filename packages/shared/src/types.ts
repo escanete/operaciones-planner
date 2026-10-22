@@ -426,8 +426,8 @@ export interface ProyectoWBSResponse {
 // ============================================
 
 export interface GanttTaskItem {
-  id: string; // id del proyecto o `asig-{asignacionId}`
-  tipo: 'PROYECTO' | 'ASIGNACION';
+  id: string; // id del proyecto/actividad/tarea o `asig-{asignacionId}`
+  tipo: 'PROYECTO' | 'ACTIVIDAD' | 'TAREA' | 'ASIGNACION';
   proyectoId: string;
   nombre: string;
   fechaInicio: string; // ISO date (yyyy-MM-dd)

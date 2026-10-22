@@ -343,6 +343,25 @@ planningRoutes.get('/gantt', async (c) => {
 
     const totalAsignaciones = proyectos.reduce((acc, p) => acc + p.asignaciones.length, 0);
 
+    // ===== Jerarquía WBS: actividades y tareas por proyecto (decisión Gantt+WBS) =====
+    const proyectoIds = proyectos.map((p) => p.id);
+    const actividades = proyectoIds.length
+      ? await prisma.actividad.findMany({
+          where: { proyectoId: { in: proyectoIds } },
+          include: {
+            tareas: {
+              orderBy: { orden: 'asc' },
+              include: {
+                asignados: {
+                  include: { recurso: { select: { nombre: true, apellido: true } } },
+                },
+              },
+            },
+          },
+          orderBy: { orden: 'asc' },
+        })
+      : [];
+
     // ===== Construir tareas (proyecto con roll-up de asignaciones) =====
     const projectTasks = new Map<string, GanttTaskItem>();
     const assignmentTasks: GanttTaskItem[] = [];
@@ -430,6 +449,67 @@ planningRoutes.get('/gantt', async (c) => {
       });
     });
 
+    // ===== Tareas del WBS (actividades → tareas) con % real del roll-up =====
+    const actTaskById = new Map<string, GanttTaskItem>();
+    const wbsTareasPorActividad = new Map<string, GanttTaskItem[]>();
+    const actividadesPorProyecto = new Map<string, typeof actividades>();
+
+    actividades.forEach((a) => {
+      const lista = actividadesPorProyecto.get(a.proyectoId) ?? [];
+      lista.push(a);
+      actividadesPorProyecto.set(a.proyectoId, lista);
+    });
+
+    actividadesPorProyecto.forEach((acts, pid) => {
+      const pTask = projectTasks.get(pid);
+      if (!pTask) return;
+      const pStart = new Date(pTask.fechaInicio + 'T00:00:00');
+      const pEnd = new Date(pTask.fechaFin + 'T00:00:00');
+
+      acts.forEach((a) => {
+        const aTareas = a.tareas;
+        const aStart = a.fechaInicio ?? (aTareas[0]?.fechaInicio ?? pStart);
+        const aEnd = a.fechaFin ?? (aTareas[aTareas.length - 1]?.fechaFin ?? pEnd);
+
+        const actTask: GanttTaskItem = {
+          id: a.id,
+          tipo: 'ACTIVIDAD',
+          proyectoId: pid,
+          nombre: a.nombre,
+          fechaInicio: toISODate(aStart),
+          fechaFin: toISODate(aEnd),
+          percentComplete: Math.round(a.percentComplete),
+          color: pTask.color ?? undefined,
+          parentId: pid,
+          dependencies: [],
+          notas: a.descripcion ?? undefined,
+          estado: undefined,
+          esCritica: false,
+        };
+        actTaskById.set(a.id, actTask);
+
+        const tareasDelGantt: GanttTaskItem[] = aTareas.map((t) => ({
+          id: t.id,
+          tipo: 'TAREA' as const,
+          proyectoId: pid,
+          nombre: t.nombre,
+          fechaInicio: toISODate(t.fechaInicio ?? aStart),
+          fechaFin: toISODate(t.fechaFin ?? aEnd),
+          percentComplete: Math.round(t.percentComplete),
+          color: undefined,
+          parentId: a.id,
+          dependencies: [],
+          recursos:
+            [...new Set(t.asignados.map((ta) => (ta.recurso.apellido ? `${ta.recurso.nombre} ${ta.recurso.apellido}` : ta.recurso.nombre)))].join(', ') ||
+            undefined,
+          notas: t.descripcion ?? undefined,
+          estado: undefined,
+          esCritica: false,
+        }));
+        wbsTareasPorActividad.set(a.id, tareasDelGantt);
+      });
+    });
+
     // ===== Ruta crítica (solo entre proyectos, fin→inicio) =====
     // Forward pass: ES/EF por orden topológico implícito (iterativo)
     const es = new Map<string, number>(); // earliest start (ms)
@@ -487,17 +567,26 @@ planningRoutes.get('/gantt', async (c) => {
       t.esCritica = slack <= 0 && projectEnd > 0;
     });
 
-    // ===== Ordenar: proyectos (padres antes que subproyectos) y sus asignaciones =====
+    // ===== Ordenar: proyecto → actividades → tareas → asignaciones → subproyectos =====
     const ordered: GanttTaskItem[] = [];
     const emitProject = (id: string, depth = 0) => {
       if (depth > 10) return; // protección contra ciclos
       const task = projectTasks.get(id);
       if (!task || (ordered as GanttTaskItem[]).includes(task)) return;
       ordered.push(task);
+
+      // Jerarquía WBS: actividades con sus tareas
+      (actividadesPorProyecto.get(id) ?? []).forEach((a) => {
+        const actTask = actTaskById.get(a.id);
+        if (actTask) ordered.push(actTask);
+        (wbsTareasPorActividad.get(a.id) ?? []).forEach((t) => ordered.push(t));
+      });
+
       // Asignaciones del proyecto
       assignmentTasks
         .filter((a) => a.parentId === id)
         .forEach((a) => ordered.push(a));
+
       // Subproyectos
       proyectos
         .filter((p) => p.subprojectId === id)

@@ -105,6 +105,15 @@ proyectosRoutes.put('/:id', async (c) => {
   const body = await c.req.json();
   const validated = proyectoSchema.partial().parse(body);
 
+  // Si el proyecto ya tiene jerarquía WBS, el % manual no aplica:
+  // el avance lo gobierna el roll-up de actividades. Se recalcula aquí mismo.
+  if (validated.percentComplete !== undefined) {
+    const totalActividades = await prisma.actividad.count({ where: { proyectoId: id } });
+    if (totalActividades > 0) {
+      delete validated.percentComplete;
+    }
+  }
+
   const proyecto = await prisma.proyecto.update({
     where: { id },
     data: {
@@ -124,7 +133,13 @@ proyectosRoutes.put('/:id', async (c) => {
     include: { cliente: true },
   });
 
-  return c.json(proyecto);
+  // Devolver el % real (roll-up) si tiene actividades
+  const conWBS = await prisma.proyecto.findUnique({
+    where: { id },
+    select: { percentComplete: true },
+  });
+
+  return c.json({ ...proyecto, percentComplete: conWBS?.percentComplete });
 });
 
 proyectosRoutes.delete('/:id', async (c) => {

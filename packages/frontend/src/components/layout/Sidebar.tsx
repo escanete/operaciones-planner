@@ -1,10 +1,9 @@
 import { usePlanningStore } from '@/stores/planningStore';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
-import { useDepartamentos, useEquipos, useProyectos, useTiposActividad } from '@/hooks/useApi';
+import { useDepartamentos, useEquipos, useProyectos, useTiposActividad, useRecursos } from '@/hooks/useApi';
 import { X } from 'lucide-react';
 
 export function Sidebar() {
@@ -14,6 +13,7 @@ export function Sidebar() {
   const { data: equipos } = useEquipos();
   const { data: proyectos } = useProyectos();
   const { data: tiposActividad } = useTiposActividad();
+  const { data: recursos } = useRecursos({ tipo: 'PERSONA', activo: true });
 
   if (!sidebarOpen) {
     return (
@@ -120,12 +120,23 @@ export function Sidebar() {
         </div>
 
         <div className="space-y-2">
-          <Label>Buscar Recurso</Label>
-          <Input
-            placeholder="Nombre, cargo..."
-            value={filters.recursoId ?? ''}
-            onChange={(e) => setFilters({ recursoId: e.target.value || undefined })}
-          />
+          <Label>Recurso</Label>
+          <Select
+            value={filters.recursoId ?? '__all__'}
+            onValueChange={(v) => setFilters({ recursoId: v === '__all__' ? undefined : v })}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Todos" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__all__">Todos</SelectItem>
+              {recursos?.map((r) => (
+                <SelectItem key={r.id} value={r.id}>
+                  {r.nombre} {r.apellido ?? ''}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
 
         <div className="flex gap-2 pt-2">

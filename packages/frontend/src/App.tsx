@@ -9,6 +9,8 @@ import { ProyectosPage } from '@/pages/ProyectosPage';
 import { ProjectDetailPage } from '@/pages/ProjectDetailPage';
 import { ReportesPage } from '@/pages/ReportesPage';
 import { AdminPage } from '@/pages/AdminPage';
+import { PerfilPage } from '@/pages/PerfilPage';
+import { ConfiguracionPage } from '@/pages/ConfiguracionPage';
 import { NotFoundPage } from '@/pages/NotFoundPage';
 
 function ProtectedRoute({ children, requiredRole }: { children: React.ReactNode; requiredRole?: string[] }) {
@@ -75,6 +77,8 @@ export function App() {
         <Route path="proyectos" element={<ProyectosPage />} />
         <Route path="proyectos/:proyectoId" element={<ProjectDetailPage />} />
         <Route path="reportes" element={<ReportesPage />} />
+        <Route path="perfil" element={<PerfilPage />} />
+        <Route path="configuracion" element={<ConfiguracionPage />} />
         <Route path="admin" element={
           <ProtectedRoute requiredRole={['SUPER_ADMIN', 'ADMIN_DEPTO']}>
             <AdminPage />

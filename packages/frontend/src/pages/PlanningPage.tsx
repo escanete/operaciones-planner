@@ -41,6 +41,7 @@ export function PlanningPage() {
     fechaFin: format(end, 'yyyy-MM-dd'),
     departamentoId: filters.departamentoId,
     equipoId: filters.equipoId,
+    recursoId: filters.recursoId,
     proyectoId: filters.proyectoId,
     tipoActividadId: filters.tipoActividadId,
   });

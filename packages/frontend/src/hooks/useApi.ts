@@ -236,7 +236,12 @@ export function useDeleteProyecto() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => api.delete(`/api/proyectos/${id}`),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['proyectos'] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['proyectos'] });
+      queryClient.invalidateQueries({ queryKey: ['planning-grid'] });
+      queryClient.invalidateQueries({ queryKey: ['project-gantt'] });
+      queryClient.invalidateQueries({ queryKey: ['proyecto-wbs'] });
+    },
   });
 }
 

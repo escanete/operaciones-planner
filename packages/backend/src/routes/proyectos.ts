@@ -149,12 +149,69 @@ proyectosRoutes.delete('/:id', async (c) => {
   }
 
   const { id } = c.req.param();
-  await prisma.proyecto.update({
-    where: { id },
-    data: { activo: false },
-  });
 
-  return c.json({ success: true });
+  // Borrado real en cascada: actividades → tareas → subtareas + asignados,
+  // asignaciones y el proyecto. Los recursos NO se tocan (quedan libres).
+  try {
+    const resultado = await prisma.$transaction(async (tx) => {
+      const proyecto = await tx.proyecto.findUnique({ where: { id } });
+      if (!proyecto) return null;
+
+      // Descolgar subproyectos del padre (SET NULL explícito)
+      await tx.proyecto.updateMany({
+        where: { subprojectId: id },
+        data: { subprojectId: null },
+      });
+
+      // Jerarquía WBS
+      const actividadIds = (
+        await tx.actividad.findMany({ where: { proyectoId: id }, select: { id: true } })
+      ).map((a) => a.id);
+
+      let totalTareas = 0;
+      let totalSubtareas = 0;
+      if (actividadIds.length > 0) {
+        const tareaIds = (
+          await tx.tarea.findMany({ where: { actividadId: { in: actividadIds } }, select: { id: true } })
+        ).map((t) => t.id);
+        totalTareas = tareaIds.length;
+
+        if (tareaIds.length > 0) {
+          const sub = await tx.subtarea.deleteMany({ where: { tareaId: { in: tareaIds } } });
+          totalSubtareas = sub.count;
+          await tx.tareaAsignado.deleteMany({ where: { tareaId: { in: tareaIds } } });
+        }
+        await tx.tarea.deleteMany({ where: { actividadId: { in: actividadIds } } });
+      }
+      await tx.actividad.deleteMany({ where: { proyectoId: id } });
+
+      // Asignaciones de planificación
+      const asig = await tx.asignacion.deleteMany({ where: { proyectoId: id } });
+
+      // El proyecto
+      await tx.proyecto.delete({ where: { id } });
+
+      return {
+        proyecto: proyecto.nombre,
+        actividades: actividadIds.length,
+        tareas: totalTareas,
+        subtareas: totalSubtareas,
+        asignaciones: asig.count,
+      };
+    });
+
+    if (!resultado) {
+      return c.json({ error: 'Proyecto no encontrado' }, 404);
+    }
+
+    return c.json({ success: true, eliminado: resultado });
+  } catch (error) {
+    console.error('Error al eliminar proyecto:', error);
+    return c.json(
+      { error: 'No se pudo eliminar el proyecto. Verifique que no tenga dependencias externas.' },
+      500
+    );
+  }
 });
 
 export { proyectosRoutes };

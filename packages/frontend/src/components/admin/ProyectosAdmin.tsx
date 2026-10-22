@@ -159,9 +159,37 @@ export function ProyectosAdmin() {
                       <Button
                         variant="ghost"
                         size="icon"
+                        title="Eliminar proyecto (borrado real)"
                         onClick={async () => {
-                          if (confirm('¿Eliminar proyecto?')) {
-                            await deleteMutation.mutateAsync(p.id);
+                          const ok = confirm(
+                            `¿ELIMINAR el proyecto "${p.nombre}"?\n\n` +
+                              'Se borrarán PERMANENTEMENTE:\n' +
+                              '• Sus actividades, tareas y subtareas\n' +
+                              '• Todas las asignaciones de planificación\n\n' +
+                              'Las personas y vehículos NO se eliminan: quedan libres.\n' +
+                              'Esta acción NO se puede deshacer.'
+                          );
+                          if (!ok) return;
+                          try {
+                            const res = (await deleteMutation.mutateAsync(p.id)) as {
+                              eliminado?: {
+                                actividades: number;
+                                tareas: number;
+                                subtareas: number;
+                                asignaciones: number;
+                              };
+                            };
+                            const r = res?.eliminado;
+                            if (r) {
+                              alert(
+                                `Proyecto eliminado.\n\nActividades: ${r.actividades}\nTareas: ${r.tareas}\nSubtareas: ${r.subtareas}\nAsignaciones: ${r.asignaciones}`
+                              );
+                            }
+                          } catch (err) {
+                            alert(
+                              'No se pudo eliminar: ' +
+                                (err instanceof Error ? err.message : String(err))
+                            );
                           }
                         }}
                       >

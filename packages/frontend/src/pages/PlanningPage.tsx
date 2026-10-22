@@ -1,8 +1,10 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useQueryClient } from '@tanstack/react-query';
 import { usePlanningStore } from '@/stores/planningStore';
+import { useAuthStore } from '@/stores/authStore';
 import { usePlanningGrid, useProjectGantt, useUpdateProyectoAvance } from '@/hooks/useApi';
-import { api } from '@/services/api';
+import { api, ApiError } from '@/services/api';
 import { VirtualizedTimeGrid, ProjectGanttView } from '@/components/planning/VirtualizedTimeGrid';
 import { AssignmentFormDialog } from '@/components/planning/AssignmentFormDialog';
 import { AssignmentDetailPanel } from '@/components/planning/AssignmentDetailPanel';
@@ -11,7 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { ChevronLeft, ChevronRight, Columns3, GanttChartSquare, Plus, SlidersHorizontal } from 'lucide-react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
-import type { Asignacion, TimeScale } from '@operaciones-planner/shared';
+import type { Asignacion, ConflictInfo, TimeScale } from '@operaciones-planner/shared';
 import { cn } from '@/lib/utils';
 
 export function PlanningPage() {
@@ -54,6 +56,38 @@ export function PlanningPage() {
     proyectoId: filters.proyectoId,
   });
   const updateAvance = useUpdateProyectoAvance();
+
+  // ===== Drag & drop de asignaciones (permisos: SUPER_ADMIN/ADMIN_DEPTO/PLANIFICADOR) =====
+  const { user } = useAuthStore();
+  const queryClient = useQueryClient();
+  const puedeMover = !!user && ['SUPER_ADMIN', 'ADMIN_DEPTO', 'PLANIFICADOR'].includes(user.rol);
+
+  const handleMoveAssignment = async (payload: {
+    id: string;
+    recursoId: string;
+    fechaInicio: string;
+    fechaFin: string;
+    version: number;
+  }) => {
+    try {
+      await api.patch(`/api/asignaciones/${payload.id}/mover`, {
+        recursoId: payload.recursoId,
+        fechaInicio: payload.fechaInicio,
+        fechaFin: payload.fechaFin,
+        version: payload.version,
+      });
+      await queryClient.invalidateQueries({ queryKey: ['planning-grid'] });
+      await queryClient.invalidateQueries({ queryKey: ['project-gantt'] });
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 409) {
+        const data = err.data as { conflictos?: ConflictInfo[] };
+        const lista = (data.conflictos ?? []).map((c) => `• ${c.mensaje}`).join('\n');
+        alert(`Conflicto de asignación en la nueva posición:\n${lista}`);
+      } else {
+        alert('No se pudo mover la asignación: ' + (err instanceof Error ? err.message : String(err)));
+      }
+    }
+  };
 
   const handleUpdatePercent = (proyectoId: string, percent: number) => {
     updateAvance.mutate({ id: proyectoId, percentComplete: percent });
@@ -223,6 +257,7 @@ export function PlanningPage() {
               fechaFin={end}
               onSelectAssignment={selectAssignment}
               onQuickCreate={openQuickCreate}
+              onMoveAssignment={puedeMover ? handleMoveAssignment : undefined}
             />
           )}
         </div>

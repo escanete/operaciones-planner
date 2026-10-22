@@ -29,6 +29,13 @@ interface GridProps {
   fechaFin: Date;
   onSelectAssignment?: (id: string) => void;
   onQuickCreate?: (recursoId: string, date: Date) => void;
+  onMoveAssignment?: (payload: {
+    id: string;
+    recursoId: string;
+    fechaInicio: string;
+    fechaFin: string;
+    version: number;
+  }) => void;
 }
 
 interface AssignmentLayout {
@@ -48,10 +55,56 @@ export function VirtualizedTimeGrid({
   fechaFin,
   onSelectAssignment,
   onQuickCreate,
+  onMoveAssignment,
 }: GridProps) {
-  const { timeScale } = usePlanningStore();
+  const { timeScale, draggingAssignmentId, setDraggingAssignment } = usePlanningStore();
+  const [hoverCell, setHoverCell] = useState<string | null>(null);
   const cellWidth = CELL_WIDTHS[timeScale] ?? 48;
   const leftColWidth = 220;
+
+  /** Suelta una asignación en la celda (día, recurso): recalcula fechas conservando duración */
+  const handleDrop = (e: React.DragEvent, recursoId: string, dia: Date) => {
+    e.preventDefault();
+    setHoverCell(null);
+    const id = e.dataTransfer.getData('text/plain');
+    if (!id || !onMoveAssignment) {
+      setDraggingAssignment(null);
+      return;
+    }
+    const asig = asignaciones.find((a) => a.id === id);
+    setDraggingAssignment(null);
+    if (!asig) return;
+
+    const grabOffset = Math.round(Number(e.dataTransfer.getData('application/x-grab-days') || 0)) || 0;
+    const nuevaInicio = addDays(dia, -grabOffset);
+    const duracion =
+      differenceInCalendarDays(parseISO(asig.fechaFin), parseISO(asig.fechaInicio)) + 1;
+    const nuevaFin = addDays(nuevaInicio, duracion - 1);
+
+    const inicioStr = format(nuevaInicio, 'yyyy-MM-dd');
+    const finStr = format(nuevaFin, 'yyyy-MM-dd');
+
+    // Sin cambios: no llamar al backend
+    if (asig.recursoId === recursoId && asig.fechaInicio === inicioStr) return;
+
+    onMoveAssignment({
+      id: asig.id,
+      recursoId,
+      fechaInicio: inicioStr,
+      fechaFin: finStr,
+      version: asig.version,
+    });
+  };
+
+  /** Inicio de arrastre: guarda id, offset de días del agarre y marca visual */
+  const handleAssignmentDragStart = (e: React.DragEvent, layout: AssignmentLayout) => {
+    e.dataTransfer.setData('text/plain', layout.asignacion.id);
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const grabDays = Math.floor((e.clientX - rect.left) / cellWidth);
+    e.dataTransfer.setData('application/x-grab-days', String(Math.max(0, grabDays)));
+    e.dataTransfer.effectAllowed = 'move';
+    setDraggingAssignment(layout.asignacion.id);
+  };
 
   // Generar los días visibles
   const dias = useMemo(() => {
@@ -317,25 +370,43 @@ export function VirtualizedTimeGrid({
               <div className="relative flex-1" style={{ height, width: gridWidth }}>
                 {/* Celdas de fondo */}
                 <div className="absolute inset-0 flex" style={{ width: gridWidth }}>
-                  {dias.map((dia) => (
-                    <div
-                      key={dia.toISOString()}
-                      className={cn(
-                        'group h-full flex-shrink-0 border-r border-border/40',
-                        isWeekend(dia) && 'bg-muted/40',
-                        isSameDay(dia, new Date()) && 'bg-primary/5',
-                        onQuickCreate && 'cursor-pointer hover:bg-accent/50'
-                      )}
-                      style={{ width: cellWidth }}
-                      onClick={() => onQuickCreate?.(recurso.id, dia)}
-                    >
-                      {onQuickCreate && (
-                        <div className="pointer-events-none flex h-full items-center justify-center opacity-0 transition-opacity group-hover:opacity-60">
-                          <Plus className="h-3 w-3 text-muted-foreground" />
-                        </div>
-                      )}
-                    </div>
-                  ))}
+                  {dias.map((dia) => {
+                    const cellKey = `${recurso.id}-${dia.toISOString()}`;
+                    return (
+                      <div
+                        key={dia.toISOString()}
+                        className={cn(
+                          'group h-full flex-shrink-0 border-r border-border/40',
+                          isWeekend(dia) && 'bg-muted/40',
+                          isSameDay(dia, new Date()) && 'bg-primary/5',
+                          onQuickCreate && 'cursor-pointer hover:bg-accent/50',
+                          draggingAssignmentId && 'cursor-move',
+                          hoverCell === cellKey && 'bg-primary/15 outline outline-1 outline-primary/40 -outline-offset-1'
+                        )}
+                        style={{ width: cellWidth }}
+                        onClick={() => onQuickCreate?.(recurso.id, dia)}
+                        onDragOver={(e) => {
+                          if (draggingAssignmentId) {
+                            e.preventDefault();
+                            e.dataTransfer.dropEffect = 'move';
+                          }
+                        }}
+                        onDragEnter={() => {
+                          if (draggingAssignmentId) setHoverCell(cellKey);
+                        }}
+                        onDragLeave={() => {
+                          if (hoverCell === cellKey) setHoverCell(null);
+                        }}
+                        onDrop={(e) => handleDrop(e, recurso.id, dia)}
+                      >
+                        {onQuickCreate && !draggingAssignmentId && (
+                          <div className="pointer-events-none flex h-full items-center justify-center opacity-0 transition-opacity group-hover:opacity-60">
+                            <Plus className="h-3 w-3 text-muted-foreground" />
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
 
                 {/* Asignaciones en lanes (por debajo de la columna fija: z-10 < z-20) */}
@@ -345,6 +416,13 @@ export function VirtualizedTimeGrid({
                     layout={l}
                     cellWidth={cellWidth}
                     onSelect={() => onSelectAssignment?.(l.asignacion.id)}
+                    draggable={!!onMoveAssignment}
+                    isDragging={draggingAssignmentId === l.asignacion.id}
+                    onDragStart={handleAssignmentDragStart}
+                    onDragEnd={() => {
+                      setDraggingAssignment(null);
+                      setHoverCell(null);
+                    }}
                   />
                 ))}
               </div>
@@ -363,24 +441,37 @@ export function VirtualizedTimeGrid({
   );
 }
 
-// Bloque individual asignado a un carril
+// Bloque individual asignado a un carril (arrastrable: mover a otro día/recurso)
 function AssignmentBlock({
   layout,
   cellWidth,
   onSelect,
+  onDragStart,
+  onDragEnd,
+  isDragging,
+  draggable,
 }: {
   layout: AssignmentLayout;
   cellWidth: number;
   onSelect?: () => void;
+  onDragStart?: (e: React.DragEvent, layout: AssignmentLayout) => void;
+  onDragEnd?: () => void;
+  isDragging?: boolean;
+  draggable?: boolean;
 }) {
   const { asignacion, lane, startOffset, spanDias, clippedLeft, clippedRight, tieneConflicto } = layout;
   const textColor = getContrastColor(asignacion.tipoActividadColor);
 
   return (
     <div
+      draggable={!!draggable}
+      onDragStart={(e) => onDragStart?.(e, layout)}
+      onDragEnd={onDragEnd}
       className={cn(
-        'absolute flex cursor-pointer items-center gap-0.5 overflow-hidden px-1 transition-shadow hover:shadow-md',
-        tieneConflicto && 'ring-1 ring-destructive'
+        'absolute flex items-center gap-0.5 overflow-hidden px-1 transition-shadow hover:shadow-md',
+        draggable ? 'cursor-move' : 'cursor-pointer',
+        tieneConflicto && 'ring-1 ring-destructive',
+        isDragging && 'opacity-40 ring-2 ring-primary'
       )}
       style={{
         left: startOffset * cellWidth + 1,
@@ -396,7 +487,7 @@ function AssignmentBlock({
         e.stopPropagation();
         onSelect?.();
       }}
-      title={`${asignacion.proyectoNombre} · ${asignacion.tipoActividadNombre}\n${asignacion.fechaInicio} → ${asignacion.fechaFin}${tieneConflicto ? '\n⚠️ Conflicto: solape con otra asignación' : ''}`}
+      title={`${asignacion.proyectoNombre} · ${asignacion.tipoActividadNombre}\n${asignacion.fechaInicio} → ${asignacion.fechaFin}${tieneConflicto ? '\n⚠️ Conflicto: solape con otra asignación' : ''}${draggable ? '\nArrastra para mover' : ''}`}
     >
       {clippedLeft && <span className="shrink-0 text-[9px]">◂</span>}
       <span className="truncate text-[10px] font-medium leading-none">

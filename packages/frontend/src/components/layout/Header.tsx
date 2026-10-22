@@ -52,14 +52,9 @@ export function Header() {
           <Link to="/recursos">
             <Button variant="ghost" size="sm">Recursos</Button>
           </Link>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => goPlanning('gantt')}
-            title="Vista Proyecto: tareas, subtareas, estados, avance y Gantt estilo MS Project"
-          >
-            Vista Proyecto
-          </Button>
+          <Link to="/proyectos">
+            <Button variant="ghost" size="sm">Proyectos</Button>
+          </Link>
           <Link to="/reportes">
             <Button variant="ghost" size="sm">Reportes</Button>
           </Link>

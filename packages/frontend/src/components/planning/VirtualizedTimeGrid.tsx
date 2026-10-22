@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { format, addDays, isSameDay, isWeekend, parseISO, differenceInCalendarDays } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { AlertTriangle, Plus } from 'lucide-react';
+import { AlertTriangle, ChevronDown, ChevronRight, ChevronsDownUp, ChevronsUpDown, Plus } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { getContrastColor } from '@operaciones-planner/shared';
 import { Badge } from '@/components/ui/badge';
@@ -536,7 +536,38 @@ export function ProjectGanttView({
   onSelectProject,
 }: GanttProps) {
   const { timeScale } = usePlanningStore();
+  const [collapsedIds, setCollapsedIds] = useState<Set<string>>(new Set());
   const cellWidth = CELL_WIDTHS[timeScale] ?? 48;
+
+  // Hijos directos por id (para colapsar/desplegar jerárquicamente)
+  const childrenMap = useMemo(() => {
+    const map = new Map<string, GanttTaskItem[]>();
+    tareas.forEach((t) => {
+      if (!t.parentId) return;
+      const lista = map.get(t.parentId) ?? [];
+      lista.push(t);
+      map.set(t.parentId, lista);
+    });
+    return map;
+  }, [tareas]);
+
+  const toggleCollapse = (id: string) =>
+    setCollapsedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+
+  // Filas con hijos: para colapsar/expandir todo
+  const idsConHijos = useMemo(
+    () => tareas.filter((t) => (childrenMap.get(t.id)?.length ?? 0) > 0).map((t) => t.id),
+    [tareas, childrenMap]
+  );
+  const todoColapsado =
+    idsConHijos.length > 0 && idsConHijos.every((id) => collapsedIds.has(id));
+  const toggleTodos = () =>
+    setCollapsedIds(todoColapsado ? new Set() : new Set(idsConHijos));
 
   const dias = useMemo(() => {
     const days: Date[] = [];
@@ -552,7 +583,7 @@ export function ProjectGanttView({
   const gridWidth = totalDias * cellWidth;
   const headerHeight = 46;
 
-  // Filas con indentación por jerarquía y posición para flechas
+  // Filas visibles: indentación por jerarquía + colapso de padres
   const rows = useMemo(() => {
     // Profundidad genérica: proyecto→actividad→tarea y asignaciones bajo el proyecto.
     // El backend emite las filas en orden jerárquico, así que una pasada basta.
@@ -568,13 +599,31 @@ export function ProjectGanttView({
         depthMap.set(t.id, (parentDepth ?? 0) + 1);
       }
     });
-    return tareas.map((t, index) => ({
+
+    // Emisión recursiva respetando el estado de colapso
+    const visibles: GanttTaskItem[] = [];
+    const emitidos = new Set<string>();
+    const emit = (t: GanttTaskItem) => {
+      if (emitidos.has(t.id)) return;
+      emitidos.add(t.id);
+      visibles.push(t);
+      if (collapsedIds.has(t.id)) return;
+      (childrenMap.get(t.id) ?? []).forEach(emit);
+    };
+    tareas.filter((t) => !t.parentId).forEach(emit);
+    // Huérfanos por seguridad
+    tareas.forEach((t) => {
+      if (!emitidos.has(t.id)) emit(t);
+    });
+
+    return visibles.map((t, index) => ({
       tarea: t,
       index,
       depth: depthMap.get(t.id) ?? 0,
-      tieneHijos: tareas.some((o) => o.parentId === t.id),
+      tieneHijos: (childrenMap.get(t.id) ?? []).length > 0,
+      totalHijos: (childrenMap.get(t.id) ?? []).length,
     }));
-  }, [tareas]);
+  }, [tareas, collapsedIds, childrenMap]);
 
   // Posiciones (x en px) para dibujar flechas de dependencia
   const barGeometry = useMemo(() => {
@@ -637,11 +686,24 @@ export function ProjectGanttView({
               <div
                 key={col.key}
                 className={cn(
-                  'flex flex-shrink-0 items-center border-r px-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground',
+                  'flex flex-shrink-0 items-center gap-1 border-r px-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground',
                   col.center && 'justify-center'
                 )}
                 style={{ width: col.width, height: headerHeight }}
               >
+                {col.key === 'nombre' && (
+                  <button
+                    className="rounded p-0.5 hover:bg-accent"
+                    onClick={toggleTodos}
+                    title={todoColapsado ? 'Expandir todo' : 'Colapsar todo'}
+                  >
+                    {todoColapsado ? (
+                      <ChevronsUpDown className="h-3.5 w-3.5" />
+                    ) : (
+                      <ChevronsDownUp className="h-3.5 w-3.5" />
+                    )}
+                  </button>
+                )}
                 {col.label}
               </div>
             ))}
@@ -686,6 +748,8 @@ export function ProjectGanttView({
             fechaInicio={fechaInicio}
             onUpdatePercent={onUpdatePercent}
             onSelectProject={onSelectProject}
+            colapsada={collapsedIds.has(row.tarea.id)}
+            onToggleCollapse={() => toggleCollapse(row.tarea.id)}
           />
         ))}
 
@@ -736,14 +800,18 @@ function GanttRow({
   fechaInicio,
   onUpdatePercent,
   onSelectProject,
+  colapsada,
+  onToggleCollapse,
 }: {
-  row: { tarea: GanttTaskItem; index: number; depth: number; tieneHijos: boolean };
+  row: { tarea: GanttTaskItem; index: number; depth: number; tieneHijos: boolean; totalHijos: number };
   dias: Date[];
   cellWidth: number;
   gridWidth: number;
   fechaInicio: Date;
   onUpdatePercent?: (proyectoId: string, percent: number) => void;
   onSelectProject?: (proyectoId: string) => void;
+  colapsada?: boolean;
+  onToggleCollapse?: () => void;
 }) {
   const { tarea, depth, tieneHijos } = row;
   const [editingPercent, setEditingPercent] = useState(false);
@@ -818,7 +886,7 @@ function GanttRow({
           {row.index + 1}
         </div>
 
-        {/* Nombre de la tarea (con jerarquía) */}
+        {/* Nombre de la tarea (con jerarquía y flechita de colapso) */}
         <div
           className={cn(
             'flex min-w-0 flex-shrink-0 cursor-pointer flex-col justify-center border-r px-2',
@@ -828,27 +896,53 @@ function GanttRow({
           onClick={() => esProyecto && onSelectProject?.(tarea.proyectoId)}
           title={tarea.nombre}
         >
-          {esProyecto ? (
-            <>
-              <span className={cn('truncate text-sm leading-tight', esSubproyecto ? 'font-semibold' : 'font-bold')}>
-                {esSubproyecto ? '↳ ' : '▸ '}
+          <div className="flex min-w-0 items-center gap-1">
+            {row.tieneHijos ? (
+              <button
+                className="shrink-0 rounded p-0.5 hover:bg-accent"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onToggleCollapse?.();
+                }}
+                title={colapsada ? 'Desplegar contenido' : 'Colapsar contenido'}
+              >
+                {colapsada ? (
+                  <ChevronRight className="h-3.5 w-3.5" />
+                ) : (
+                  <ChevronDown className="h-3.5 w-3.5" />
+                )}
+              </button>
+            ) : (
+              <span className="w-[18px] shrink-0" />
+            )}
+
+            {esProyecto ? (
+              <>
+                <span className={cn('truncate text-sm leading-tight', esSubproyecto ? 'font-semibold' : 'font-bold')}>
+                  {esSubproyecto ? '↳ ' : ''}
+                  {tarea.nombre}
+                </span>
+                {colapsada && row.totalHijos > 0 && (
+                  <span className="shrink-0 text-[9px] text-muted-foreground">(+{row.totalHijos})</span>
+                )}
+              </>
+            ) : tarea.tipo === 'ACTIVIDAD' ? (
+              <>
+                <span className="truncate text-sm font-semibold leading-tight">{tarea.nombre}</span>
+                {colapsada && row.totalHijos > 0 && (
+                  <span className="shrink-0 text-[9px] text-muted-foreground">(+{row.totalHijos})</span>
+                )}
+              </>
+            ) : (
+              <span className="truncate text-xs leading-tight text-muted-foreground">
+                {'· '}
                 {tarea.nombre}
               </span>
-              {tarea.esCritica && (
-                <span className="w-fit rounded bg-red-100 px-1 text-[9px] font-semibold leading-tight text-red-700">
-                  RUTA CRÍTICA
-                </span>
-              )}
-            </>
-          ) : tarea.tipo === 'ACTIVIDAD' ? (
-            <span className="truncate text-sm font-semibold leading-tight">
-              {'▸ '}
-              {tarea.nombre}
-            </span>
-          ) : (
-            <span className="truncate text-xs leading-tight text-muted-foreground">
-              {'· '}
-              {tarea.nombre}
+            )}
+          </div>
+          {esProyecto && tarea.esCritica && (
+            <span className="w-fit rounded bg-red-100 px-1 text-[9px] font-semibold leading-tight text-red-700">
+              RUTA CRÍTICA
             </span>
           )}
         </div>

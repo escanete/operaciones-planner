@@ -11,7 +11,7 @@ const createUsuarioSchema = z.object({
   password: z.string().min(8),
   name: z.string().min(1),
   apellido: z.string().min(1),
-  rol: z.enum(['SUPER_ADMIN', 'ADMIN_DEPTO', 'PLANIFICADOR', 'OPERADOR', 'VISTA_SOLO']).default('OPERADOR'),
+  rol: z.enum(['SUPER_ADMIN', 'ADMIN_DEPTO', 'PLANIFICADOR', 'COMERCIAL', 'JEFE_AREA', 'OPERADOR', 'VISTA_SOLO']).default('OPERADOR'),
   recursoId: z.string().optional().nullable(),
   roleLevel: z.number().int().min(0).max(10).default(0),
   departmentId: z.string().optional().nullable(),

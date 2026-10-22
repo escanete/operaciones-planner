@@ -1,7 +1,10 @@
+import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
 import { useProyectos } from '@/hooks/useApi';
 
 export function ProyectosPage() {
+  const navigate = useNavigate();
   const { data: proyectos, isLoading } = useProyectos();
 
   return (
@@ -17,14 +20,24 @@ export function ProyectosPage() {
           ) : (
             <div className="space-y-2">
               {proyectos?.map((p) => (
-                <div key={p.id} className="flex items-center justify-between rounded border p-3">
+                <div
+                  key={p.id}
+                  className="flex cursor-pointer items-center justify-between rounded border p-3 transition-colors hover:bg-accent"
+                  onClick={() => navigate(`/proyectos/${p.id}`)}
+                  title="Abrir detalle con actividades, tareas y subtareas"
+                >
                   <div>
                     <p className="font-medium">{p.nombre}</p>
                     <p className="text-sm text-muted-foreground">{p.codigo} - {p.cliente?.nombre}</p>
                   </div>
-                  <span className={p.activo ? 'text-green-600' : 'text-gray-400'}>
-                    {p.estado}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    {p.percentComplete !== undefined && p.percentComplete !== null && (
+                      <span className="text-sm font-medium tabular-nums">{p.percentComplete}%</span>
+                    )}
+                    <Badge variant={p.activo ? 'default' : 'secondary'}>
+                      {p.estado}
+                    </Badge>
+                  </div>
                 </div>
               ))}
             </div>

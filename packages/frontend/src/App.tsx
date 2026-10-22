@@ -6,6 +6,7 @@ import { LoginPage } from '@/pages/LoginPage';
 import { PlanningPage } from '@/pages/PlanningPage';
 import { RecursosPage } from '@/pages/RecursosPage';
 import { ProyectosPage } from '@/pages/ProyectosPage';
+import { ProjectDetailPage } from '@/pages/ProjectDetailPage';
 import { ReportesPage } from '@/pages/ReportesPage';
 import { AdminPage } from '@/pages/AdminPage';
 import { NotFoundPage } from '@/pages/NotFoundPage';
@@ -72,6 +73,7 @@ export function App() {
         <Route path="planning" element={<PlanningPage />} />
         <Route path="recursos" element={<RecursosPage />} />
         <Route path="proyectos" element={<ProyectosPage />} />
+        <Route path="proyectos/:proyectoId" element={<ProjectDetailPage />} />
         <Route path="reportes" element={<ReportesPage />} />
         <Route path="admin" element={
           <ProtectedRoute requiredRole={['SUPER_ADMIN', 'ADMIN_DEPTO']}>

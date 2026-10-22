@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { usePlanningStore } from '@/stores/planningStore';
 import { usePlanningGrid, useProjectGantt, useUpdateProyectoAvance } from '@/hooks/useApi';
 import { api } from '@/services/api';
@@ -14,6 +15,7 @@ import type { Asignacion, TimeScale } from '@operaciones-planner/shared';
 import { cn } from '@/lib/utils';
 
 export function PlanningPage() {
+  const navigate = useNavigate();
   const {
     viewMode,
     timeScale,
@@ -205,6 +207,7 @@ export function PlanningPage() {
                 fechaInicio={start}
                 fechaFin={end}
                 onUpdatePercent={handleUpdatePercent}
+                onSelectProject={(id) => navigate(`/proyectos/${id}`)}
               />
             )
           ) : isLoading ? (

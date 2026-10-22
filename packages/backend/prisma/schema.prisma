@@ -109,6 +109,7 @@ model Proyecto {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   asignaciones Asignacion[]
+  actividades  Actividad[]
 
   // Planificación tipo MS Project (decisión c)
   scheduledStart   DateTime? // Inicio programado (Gantt)
@@ -170,6 +171,7 @@ model Recurso {
   disponibilidades Disponibilidad[]
   ausencias     Ausencia[]
   equiposLiderados Equipo[] @relation("EquipoLider")
+  tareasAsignadas TareaAsignado[]
   user          User?
 
   @@index([departamentoId, activo])
@@ -256,6 +258,81 @@ model Asignacion {
   @@index([fechaInicio, fechaFin])
   @@index([estado])
   @@map("asignaciones")
+}
+
+// ============================================
+// WBS: ACTIVIDADES → TAREAS → SUBTAREAS
+// (servicios cobrados al cliente con avance por roll-up)
+// ============================================
+
+model Actividad {
+  id           String   @id @default(cuid())
+  proyectoId   String
+  proyecto     Proyecto @relation(fields: [proyectoId], references: [id], onDelete: Cascade)
+  nombre       String
+  descripcion  String?
+  orden        Int      @default(0)
+  // Fechas opcionales (útiles para el export a MS Project)
+  fechaInicio  DateTime?
+  fechaFin     DateTime?
+  // Avance: promedio automático de las tareas (0-100)
+  percentComplete Float  @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  tareas Tarea[]
+
+  @@index([proyectoId])
+  @@map("actividades")
+}
+
+model Tarea {
+  id          String    @id @default(cuid())
+  actividadId String
+  actividad   Actividad @relation(fields: [actividadId], references: [id], onDelete: Cascade)
+  nombre      String
+  descripcion String?
+  orden       Int       @default(0)
+  fechaInicio DateTime?
+  fechaFin    DateTime?
+  // Checkbox directo cuando no tiene subtareas; con subtareas es promedio automático
+  completada  Boolean   @default(false)
+  percentComplete Float @default(0)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  subtareas Subtarea[]
+  asignados TareaAsignado[]
+
+  @@index([actividadId])
+  @@map("tareas")
+}
+
+model Subtarea {
+  id       String @id @default(cuid())
+  tareaId  String
+  tarea    Tarea  @relation(fields: [tareaId], references: [id], onDelete: Cascade)
+  nombre   String
+  descripcion String?
+  orden    Int    @default(0)
+  completada Boolean @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([tareaId])
+  @@map("subtareas")
+}
+
+// Asignación múltiple: varias personas pueden trabajar una misma tarea
+model TareaAsignado {
+  id        String  @id @default(cuid())
+  tareaId   String
+  tarea     Tarea   @relation(fields: [tareaId], references: [id], onDelete: Cascade)
+  recursoId String
+  recurso   Recurso @relation(fields: [recursoId], references: [id], onDelete: Cascade)
+
+  @@unique([tareaId, recursoId])
+  @@map("tareas_asignados")
 }
 
 // ============================================

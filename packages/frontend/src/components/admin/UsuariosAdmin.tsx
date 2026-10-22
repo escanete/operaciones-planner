@@ -24,9 +24,11 @@ interface UsuarioRow {
 
 const ROLES = [
   { value: 'SUPER_ADMIN', label: 'Super Admin' },
-  { value: 'ADMIN_DEPTO', label: 'Admin Departamento' },
-  { value: 'PLANIFICADOR', label: 'Planificador' },
-  { value: 'OPERADOR', label: 'Operador' },
+  { value: 'ADMIN_DEPTO', label: 'Gerente de Área (Admin Depto)' },
+  { value: 'PLANIFICADOR', label: 'PM / Planificador' },
+  { value: 'COMERCIAL', label: 'Comercial' },
+  { value: 'JEFE_AREA', label: 'Jefe de Área' },
+  { value: 'OPERADOR', label: 'Ingeniero / Técnico' },
   { value: 'VISTA_SOLO', label: 'Solo lectura' },
 ];
 

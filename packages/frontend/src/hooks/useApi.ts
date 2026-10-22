@@ -12,6 +12,10 @@ import type {
   ConflictInfo,
   PlanningGridResponse,
   ProjectGanttResponse,
+  ProyectoWBSResponse,
+  Actividad,
+  Tarea,
+  Subtarea,
 } from '@operaciones-planner/shared';
 
 // ============================================
@@ -432,6 +436,101 @@ export function useUpdateProyectoAvance() {
       queryClient.invalidateQueries({ queryKey: ['project-gantt'] });
       queryClient.invalidateQueries({ queryKey: ['proyectos'] });
     },
+  });
+}
+
+// ============================================
+// WBS: ACTIVIDADES → TAREAS → SUBTAREAS
+// ============================================
+
+export function useProyectoWBS(proyectoId: string) {
+  return useQuery({
+    queryKey: ['proyecto-wbs', proyectoId],
+    queryFn: () => api.get<ProyectoWBSResponse>(`/api/actividades/proyecto/${proyectoId}`),
+    enabled: !!proyectoId,
+  });
+}
+
+function invalidateWBS(queryClient: ReturnType<typeof useQueryClient>, proyectoId: string) {
+  queryClient.invalidateQueries({ queryKey: ['proyecto-wbs', proyectoId] });
+  queryClient.invalidateQueries({ queryKey: ['project-gantt'] });
+  queryClient.invalidateQueries({ queryKey: ['proyectos'] });
+}
+
+export function useCreateActividad(proyectoId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (data: Record<string, unknown>) => api.post<Actividad>('/api/actividades', data),
+    onSuccess: () => invalidateWBS(queryClient, proyectoId),
+  });
+}
+
+export function useUpdateActividad(proyectoId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, data }: { id: string; data: Record<string, unknown> }) =>
+      api.put<Actividad>(`/api/actividades/${id}`, data),
+    onSuccess: () => invalidateWBS(queryClient, proyectoId),
+  });
+}
+
+export function useDeleteActividad(proyectoId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.delete(`/api/actividades/${id}`),
+    onSuccess: () => invalidateWBS(queryClient, proyectoId),
+  });
+}
+
+export function useCreateTarea(proyectoId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ actividadId, data }: { actividadId: string; data: Record<string, unknown> }) =>
+      api.post<Tarea>(`/api/actividades/${actividadId}/tareas`, data),
+    onSuccess: () => invalidateWBS(queryClient, proyectoId),
+  });
+}
+
+export function useUpdateTarea(proyectoId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, data }: { id: string; data: Record<string, unknown> }) =>
+      api.put<Tarea>(`/api/actividades/tarea/${id}`, data),
+    onSuccess: () => invalidateWBS(queryClient, proyectoId),
+  });
+}
+
+export function useDeleteTarea(proyectoId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.delete(`/api/actividades/tarea/${id}`),
+    onSuccess: () => invalidateWBS(queryClient, proyectoId),
+  });
+}
+
+export function useCreateSubtarea(proyectoId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ tareaId, data }: { tareaId: string; data: Record<string, unknown> }) =>
+      api.post<Subtarea>(`/api/actividades/tarea/${tareaId}/subtareas`, data),
+    onSuccess: () => invalidateWBS(queryClient, proyectoId),
+  });
+}
+
+export function useUpdateSubtarea(proyectoId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, data }: { id: string; data: Record<string, unknown> }) =>
+      api.put<Subtarea>(`/api/actividades/subtarea/${id}`, data),
+    onSuccess: () => invalidateWBS(queryClient, proyectoId),
+  });
+}
+
+export function useDeleteSubtarea(proyectoId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.delete(`/api/actividades/subtarea/${id}`),
+    onSuccess: () => invalidateWBS(queryClient, proyectoId),
   });
 }
 

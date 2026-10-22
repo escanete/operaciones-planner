@@ -11,7 +11,7 @@ export type ProyectoEstado = 'PLANIFICACION' | 'ACTIVO' | 'EN_PAUSA' | 'FINALIZA
 
 export type AsignacionEstado = 'BORRADOR' | 'CONFIRMADA' | 'EN_CURSO' | 'COMPLETADA' | 'CANCELADA' | 'CONFLICTO';
 
-export type Rol = 'SUPER_ADMIN' | 'ADMIN_DEPTO' | 'PLANIFICADOR' | 'OPERADOR' | 'VISTA_SOLO';
+export type Rol = 'SUPER_ADMIN' | 'ADMIN_DEPTO' | 'PLANIFICADOR' | 'COMERCIAL' | 'JEFE_AREA' | 'OPERADOR' | 'VISTA_SOLO';
 
 export type AusenciaTipo = 'VACACIONES' | 'ENFERMEDAD' | 'PERMISO' | 'CAPACITACION' | 'COMISION_SERVICIO' | 'OTRO';
 
@@ -351,6 +351,73 @@ export interface PlanningGridResponse {
     fechaFin: string;
     totalRecursos: number;
     totalAsignaciones: number;
+  };
+}
+
+// ============================================
+// WBS: ACTIVIDADES → TAREAS → SUBTAREAS
+// ============================================
+
+export interface Subtarea {
+  id: string;
+  tareaId: string;
+  nombre: string;
+  descripcion?: string;
+  orden: number;
+  completada: boolean; // checkbox 0/100
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface TareaAsignado {
+  id: string;
+  recursoId: string;
+  nombre: string;
+  apellido?: string;
+}
+
+export interface Tarea {
+  id: string;
+  actividadId: string;
+  nombre: string;
+  descripcion?: string;
+  orden: number;
+  fechaInicio?: Date;
+  fechaFin?: Date;
+  completada: boolean; // checkbox directo si no tiene subtareas
+  percentComplete: number; // roll-up de subtareas o 0/100
+  subtareas?: Subtarea[];
+  asignados?: TareaAsignado[];
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface Actividad {
+  id: string;
+  proyectoId: string;
+  nombre: string;
+  descripcion?: string;
+  orden: number;
+  fechaInicio?: Date;
+  fechaFin?: Date;
+  percentComplete: number; // promedio automático de tareas
+  tareas?: Tarea[];
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface ProyectoWBSResponse {
+  proyecto: {
+    id: string;
+    nombre: string;
+    estado: ProyectoEstado;
+    percentComplete: number;
+  };
+  actividades: Actividad[];
+  metadata: {
+    totalActividades: number;
+    totalTareas: number;
+    totalSubtareas: number;
   };
 }
 

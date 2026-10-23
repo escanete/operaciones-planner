@@ -32,7 +32,9 @@ RUN cd packages/backend && \
       --alias:@operaciones-planner/shared=/app/packages/shared/src/index.ts \
       --outfile=dist/index.js && \
     esbuild prisma/seed.ts --bundle --platform=node --format=esm --packages=external \
-      --outfile=seed.mjs
+      --outfile=seed.mjs && \
+    esbuild scripts/reset-datos.ts --bundle --platform=node --format=esm --packages=external \
+      --outfile=reset.mjs
 
 WORKDIR /app/packages/backend
 EXPOSE 3001

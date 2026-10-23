@@ -10,7 +10,7 @@ import { AssignmentFormDialog } from '@/components/planning/AssignmentFormDialog
 import { AssignmentDetailPanel } from '@/components/planning/AssignmentDetailPanel';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { ChevronLeft, ChevronRight, Columns3, GanttChartSquare, Plus, SlidersHorizontal } from 'lucide-react';
+import { CalendarDays, ChevronLeft, ChevronRight, Columns3, GanttChartSquare, Plus, SlidersHorizontal } from 'lucide-react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import type { Asignacion, ConflictInfo, TimeScale } from '@operaciones-planner/shared';
@@ -27,6 +27,7 @@ export function PlanningPage() {
     setViewMode,
     setTimeScale,
     navigateDate,
+    goToDate,
     selectAssignment,
     setSidebarOpen,
   } = usePlanningStore();
@@ -169,6 +170,17 @@ export function PlanningPage() {
               <Button variant="outline" size="icon" onClick={() => navigateDate('next')} title="Siguiente">
                 <ChevronRight className="h-4 w-4" />
               </Button>
+              {/* Navegación libre: saltar a cualquier fecha */}
+              <div className="flex items-center gap-1" title="Ir a fecha (se ajusta a la escala actual)">
+                <CalendarDays className="h-3.5 w-3.5 text-muted-foreground" />
+                <input
+                  type="date"
+                  className="h-8 rounded-md border border-input bg-transparent px-2 text-sm outline-none focus:border-primary"
+                  onChange={(e) => {
+                    if (e.target.value) goToDate(e.target.value);
+                  }}
+                />
+              </div>
             </div>
 
             <h1 className="text-lg font-semibold">{title}</h1>

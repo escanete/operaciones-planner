@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+﻿import { useEffect, useMemo, useState, type MouseEvent as ReactMouseEvent } from 'react';
 import { format, addDays, isSameDay, isWeekend, parseISO, differenceInCalendarDays } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { AlertTriangle, ChevronDown, ChevronRight, ChevronsDownUp, ChevronsUpDown, Plus } from 'lucide-react';
@@ -8,7 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { usePlanningStore } from '@/stores/planningStore';
 import type { AsignacionGridItem, RecursoGridItem, GanttTaskItem } from '@operaciones-planner/shared';
 
-// Configuración de tamaño de celda según escala temporal
+// ConfiguraciÃ³n de tamaÃ±o de celda segÃºn escala temporal
 const CELL_WIDTHS: Record<string, number> = {
   day: 200,
   week: 64,
@@ -41,11 +41,11 @@ interface GridProps {
 interface AssignmentLayout {
   asignacion: AsignacionGridItem;
   lane: number;              // carril vertical
-  startOffset: number;       // días desde fechaInicio del grid
-  spanDias: number;          // días visibles
+  startOffset: number;       // dÃ­as desde fechaInicio del grid
+  spanDias: number;          // dÃ­as visibles
   clippedLeft: boolean;      // viene de antes del rango
-  clippedRight: boolean;     // sigue después del rango
-  tieneConflicto: boolean;   // se topa con otra asignación
+  clippedRight: boolean;     // sigue despuÃ©s del rango
+  tieneConflicto: boolean;   // se topa con otra asignaciÃ³n
 }
 
 export function VirtualizedTimeGrid({
@@ -62,7 +62,7 @@ export function VirtualizedTimeGrid({
   const cellWidth = CELL_WIDTHS[timeScale] ?? 48;
   const leftColWidth = 220;
 
-  /** Suelta una asignación en la celda (día, recurso): recalcula fechas conservando duración */
+  /** Suelta una asignaciÃ³n en la celda (dÃ­a, recurso): recalcula fechas conservando duraciÃ³n */
   const handleDrop = (e: React.DragEvent, recursoId: string, dia: Date) => {
     e.preventDefault();
     setHoverCell(null);
@@ -96,7 +96,7 @@ export function VirtualizedTimeGrid({
     });
   };
 
-  /** Inicio de arrastre: guarda id, offset de días del agarre y marca visual */
+  /** Inicio de arrastre: guarda id, offset de dÃ­as del agarre y marca visual */
   const handleAssignmentDragStart = (e: React.DragEvent, layout: AssignmentLayout) => {
     e.dataTransfer.setData('text/plain', layout.asignacion.id);
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
@@ -106,7 +106,7 @@ export function VirtualizedTimeGrid({
     setDraggingAssignment(layout.asignacion.id);
   };
 
-  // Generar los días visibles
+  // Generar los dÃ­as visibles
   const dias = useMemo(() => {
     const days: Date[] = [];
     let current = new Date(fechaInicio);
@@ -153,7 +153,7 @@ export function VirtualizedTimeGrid({
     return grouped;
   }, [recursos]);
 
-  // Calcular layout de cada asignación por recurso (lanes + conflictos + clipping)
+  // Calcular layout de cada asignaciÃ³n por recurso (lanes + conflictos + clipping)
   const layoutPorRecurso = useMemo(() => {
     const map = new Map<string, { layouts: AssignmentLayout[]; lanes: number; tieneConflicto: boolean }>();
 
@@ -165,7 +165,7 @@ export function VirtualizedTimeGrid({
     });
 
     porRecurso.forEach((asigs, recursoId) => {
-      // Clonar y ordenar por fecha de inicio, luego por duración (más largas primero)
+      // Clonar y ordenar por fecha de inicio, luego por duraciÃ³n (mÃ¡s largas primero)
       const sorted = [...asigs].sort((a, b) => {
         const diffA = differenceInCalendarDays(parseISO(a.fechaInicio), fechaInicio);
         const diffB = differenceInCalendarDays(parseISO(b.fechaInicio), fechaInicio);
@@ -205,7 +205,7 @@ export function VirtualizedTimeGrid({
           laneEnds.push(aFin);
         }
 
-        // Detectar conflicto: se topa con otra asignación en el mismo recurso
+        // Detectar conflicto: se topa con otra asignaciÃ³n en el mismo recurso
         const conflicto = sorted.some((other) => {
           if (other.id === a.id) return false;
           const oInicio = parseISO(other.fechaInicio);
@@ -245,7 +245,7 @@ export function VirtualizedTimeGrid({
   const headerHeight = 46;
 
   return (
-    // Contenedor único con scroll horizontal y vertical
+    // Contenedor Ãºnico con scroll horizontal y vertical
     <div className="relative h-full w-full overflow-auto grid-scrollbar bg-card">
       <div style={{ width: leftColWidth + gridWidth, minWidth: '100%' }}>
         {/* ===== Header de fechas (sticky top) ===== */}
@@ -261,7 +261,7 @@ export function VirtualizedTimeGrid({
             <span className="text-sm font-semibold">Recurso</span>
           </div>
 
-          {/* Días */}
+          {/* DÃ­as */}
           <div className="flex flex-shrink-0" style={{ width: gridWidth }}>
             {dias.map((dia) => (
               <div
@@ -311,7 +311,7 @@ export function VirtualizedTimeGrid({
             return (
               <div
                 key={fila.id}
-                className="sticky left-0 z-20 flex items-center border-b bg-muted/60 px-3 pl-8 text-xs font-medium text-muted-foreground"
+                className="sticky left-0 z-20 flex items-center border-b bg-muted px-3 pl-8 text-xs font-medium text-muted-foreground"
                 style={{ height: 24, width: 'max-content', minWidth: '100%' }}
               >
                 {fila.nombre}
@@ -366,7 +366,7 @@ export function VirtualizedTimeGrid({
                 </Badge>
               </div>
 
-              {/* Franja de días con asignaciones */}
+              {/* Franja de dÃ­as con asignaciones */}
               <div className="relative flex-1" style={{ height, width: gridWidth }}>
                 {/* Celdas de fondo */}
                 <div className="absolute inset-0 flex" style={{ width: gridWidth }}>
@@ -441,7 +441,7 @@ export function VirtualizedTimeGrid({
   );
 }
 
-// Bloque individual asignado a un carril (arrastrable: mover a otro día/recurso)
+// Bloque individual asignado a un carril (arrastrable: mover a otro dÃ­a/recurso)
 function AssignmentBlock({
   layout,
   cellWidth,
@@ -487,38 +487,36 @@ function AssignmentBlock({
         e.stopPropagation();
         onSelect?.();
       }}
-      title={`${asignacion.proyectoNombre} · ${asignacion.tipoActividadNombre}\n${asignacion.fechaInicio} → ${asignacion.fechaFin}${tieneConflicto ? '\n⚠️ Conflicto: solape con otra asignación' : ''}${draggable ? '\nArrastra para mover' : ''}`}
+      title={`${asignacion.proyectoNombre} Â· ${asignacion.tipoActividadNombre}\n${asignacion.fechaInicio} â†’ ${asignacion.fechaFin}${tieneConflicto ? '\nâš ï¸ Conflicto: solape con otra asignaciÃ³n' : ''}${draggable ? '\nArrastra para mover' : ''}`}
     >
-      {clippedLeft && <span className="shrink-0 text-[9px]">◂</span>}
+      {clippedLeft && <span className="shrink-0 text-[9px]">â—‚</span>}
       <span className="truncate text-[10px] font-medium leading-none">
         {asignacion.proyectoNombre}
       </span>
       {tieneConflicto && <AlertTriangle className="h-3 w-3 shrink-0" />}
-      {clippedRight && <span className="shrink-0 text-[9px]">▸</span>}
+      {clippedRight && <span className="shrink-0 text-[9px]">â–¸</span>}
     </div>
   );
 }
 
 // ============================================
-// VISTA GANTT — ESTILO MS PROJECT (decisión d)
+// VISTA GANTT â€” ESTILO MS PROJECT (decisiÃ³n d)
 // ============================================
 
 const GANTT_ROW_HEIGHT = 36;
 
 // Columnas de la tabla de tareas (estilo MS Project)
 const GANTT_COLS = {
-  num: 34,        // N°
+  num: 34,        // NÂ°
   nombre: 190,    // Tarea
   estado: 96,     // Estado
   asignado: 120,  // Asignado a
   inicio: 76,     // Fecha inicio
-  termino: 76,    // Fecha término
-  duracion: 46,   // Duración (días)
+  termino: 76,    // Fecha tÃ©rmino
+  duracion: 46,   // DuraciÃ³n (dÃ­as)
   avance: 64,     // % avance
   comentarios: 150, // Comentarios
 } as const;
-
-const GANTT_LEFT_WIDTH = Object.values(GANTT_COLS).reduce((a, b) => a + b, 0);
 
 interface GanttProps {
   tareas: GanttTaskItem[];
@@ -539,7 +537,47 @@ export function ProjectGanttView({
   const [collapsedIds, setCollapsedIds] = useState<Set<string>>(new Set());
   const cellWidth = CELL_WIDTHS[timeScale] ?? 48;
 
-  // Hijos directos por id (para colapsar/desplegar jerárquicamente)
+  // ===== Columnas redimensionables (persistidas en localStorage) =====
+  const [colWidths, setColWidths] = useState<Record<string, number>>(() => {
+    try {
+      const saved = localStorage.getItem('gantt-col-widths');
+      return saved ? { ...GANTT_COLS, ...JSON.parse(saved) } : { ...GANTT_COLS };
+    } catch {
+      return { ...GANTT_COLS };
+    }
+  });
+  useEffect(() => {
+    try {
+      localStorage.setItem('gantt-col-widths', JSON.stringify(colWidths));
+    } catch {
+      /* almacenamiento no disponible */
+    }
+  }, [colWidths]);
+  const leftWidth = Object.values(colWidths).reduce((a, b) => a + b, 0);
+
+  const startResize = (key: string, e: ReactMouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const startX = e.clientX;
+    const startW = colWidths[key];
+    const min = key === 'num' ? 28 : key === 'duracion' ? 34 : 44;
+    const move = (ev: MouseEvent) => {
+      const next = Math.min(500, Math.max(min, startW + ev.clientX - startX));
+      setColWidths((prev) => (prev[key] === next ? prev : { ...prev, [key]: next }));
+    };
+    const up = () => {
+      window.removeEventListener('mousemove', move);
+      window.removeEventListener('mouseup', up);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+    window.addEventListener('mousemove', move);
+    window.addEventListener('mouseup', up);
+  };
+
+  // Hijos directos por id (para colapsar/desplegar jerÃ¡rquicamente)
   const childrenMap = useMemo(() => {
     const map = new Map<string, GanttTaskItem[]>();
     tareas.forEach((t) => {
@@ -583,10 +621,10 @@ export function ProjectGanttView({
   const gridWidth = totalDias * cellWidth;
   const headerHeight = 46;
 
-  // Filas visibles: indentación por jerarquía + colapso de padres
+  // Filas visibles: indentaciÃ³n por jerarquÃ­a + colapso de padres
   const rows = useMemo(() => {
-    // Profundidad genérica: proyecto→actividad→tarea y asignaciones bajo el proyecto.
-    // El backend emite las filas en orden jerárquico, así que una pasada basta.
+    // Profundidad genÃ©rica: proyectoâ†’actividadâ†’tarea y asignaciones bajo el proyecto.
+    // El backend emite las filas en orden jerÃ¡rquico, asÃ­ que una pasada basta.
     const depthMap = new Map<string, number>();
     tareas.forEach((t) => {
       if (t.tipo === 'PROYECTO') {
@@ -600,7 +638,7 @@ export function ProjectGanttView({
       }
     });
 
-    // Emisión recursiva respetando el estado de colapso
+    // EmisiÃ³n recursiva respetando el estado de colapso
     const visibles: GanttTaskItem[] = [];
     const emitidos = new Set<string>();
     const emit = (t: GanttTaskItem) => {
@@ -611,9 +649,11 @@ export function ProjectGanttView({
       (childrenMap.get(t.id) ?? []).forEach(emit);
     };
     tareas.filter((t) => !t.parentId).forEach(emit);
-    // Huérfanos por seguridad
+    // HuÃ©rfanos reales: solo si su padre NO existe en el Ã¡rbol actual.
+    // (Los hijos de padres colapsados NO son huÃ©rfanos: deben permanecer ocultos)
+    const idsExistentes = new Set(tareas.map((t) => t.id));
     tareas.forEach((t) => {
-      if (!emitidos.has(t.id)) emit(t);
+      if (!emitidos.has(t.id) && (!t.parentId || !idsExistentes.has(t.parentId))) emit(t);
     });
 
     return visibles.map((t, index) => ({
@@ -641,7 +681,7 @@ export function ProjectGanttView({
     return geo;
   }, [rows, fechaInicio, cellWidth]);
 
-  // Flechas de dependencia (fin → inicio)
+  // Flechas de dependencia (fin â†’ inicio)
   const dependencyPaths = useMemo(() => {
     const paths: { d: string; critica: boolean }[] = [];
     tareas.forEach((t) => {
@@ -665,28 +705,28 @@ export function ProjectGanttView({
 
   return (
     <div className="relative h-full w-full overflow-auto grid-scrollbar bg-card">
-      <div style={{ width: GANTT_LEFT_WIDTH + gridWidth, minWidth: '100%' }}>
+      <div style={{ width: leftWidth + gridWidth, minWidth: '100%' }}>
         {/* ===== Header ===== */}
         <div className="sticky top-0 z-30 flex border-b bg-card" style={{ height: headerHeight }}>
           <div
             className="sticky left-0 z-40 flex flex-shrink-0 items-stretch border-r bg-card"
-            style={{ width: GANTT_LEFT_WIDTH, height: headerHeight }}
+            style={{ width: leftWidth, height: headerHeight }}
           >
             {[
-              { key: 'num', label: 'N°', width: GANTT_COLS.num, center: true },
-              { key: 'nombre', label: 'Tarea', width: GANTT_COLS.nombre },
-              { key: 'estado', label: 'Estado', width: GANTT_COLS.estado },
-              { key: 'asignado', label: 'Asignado a', width: GANTT_COLS.asignado },
-              { key: 'inicio', label: 'Inicio', width: GANTT_COLS.inicio },
-              { key: 'termino', label: 'Término', width: GANTT_COLS.termino },
-              { key: 'duracion', label: 'Dur', width: GANTT_COLS.duracion, center: true },
-              { key: 'avance', label: 'Avance', width: GANTT_COLS.avance, center: true },
-              { key: 'comentarios', label: 'Comentarios', width: GANTT_COLS.comentarios },
+              { key: 'num', label: 'NÂ°', width: colWidths.num, center: true },
+              { key: 'nombre', label: 'Tarea', width: colWidths.nombre },
+              { key: 'estado', label: 'Estado', width: colWidths.estado },
+              { key: 'asignado', label: 'Asignado a', width: colWidths.asignado },
+              { key: 'inicio', label: 'Inicio', width: colWidths.inicio },
+              { key: 'termino', label: 'TÃ©rmino', width: colWidths.termino },
+              { key: 'duracion', label: 'Dur', width: colWidths.duracion, center: true },
+              { key: 'avance', label: 'Avance', width: colWidths.avance, center: true },
+              { key: 'comentarios', label: 'Comentarios', width: colWidths.comentarios },
             ].map((col) => (
               <div
                 key={col.key}
                 className={cn(
-                  'flex flex-shrink-0 items-center gap-1 border-r px-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground',
+                  'relative flex flex-shrink-0 select-none items-center gap-1 border-r px-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground',
                   col.center && 'justify-center'
                 )}
                 style={{ width: col.width, height: headerHeight }}
@@ -705,6 +745,12 @@ export function ProjectGanttView({
                   </button>
                 )}
                 {col.label}
+                {/* Handle de redimensionamiento de columna */}
+                <div
+                  className="absolute right-0 top-0 z-10 h-full w-1.5 cursor-col-resize bg-transparent transition-colors hover:bg-primary/40 active:bg-primary/60"
+                  onMouseDown={(e) => startResize(col.key, e)}
+                  title="Arrastra para ajustar el ancho de la columna"
+                />
               </div>
             ))}
           </div>
@@ -746,6 +792,8 @@ export function ProjectGanttView({
             cellWidth={cellWidth}
             gridWidth={gridWidth}
             fechaInicio={fechaInicio}
+            colWidths={colWidths}
+            leftWidth={leftWidth}
             onUpdatePercent={onUpdatePercent}
             onSelectProject={onSelectProject}
             colapsada={collapsedIds.has(row.tarea.id)}
@@ -763,7 +811,7 @@ export function ProjectGanttView({
         {dependencyPaths.length > 0 && (
           <svg
             className="pointer-events-none absolute"
-            style={{ left: GANTT_LEFT_WIDTH, top: headerHeight }}
+            style={{ left: leftWidth, top: headerHeight }}
             width={gridWidth}
             height={Math.max(svgHeight, 1)}
           >
@@ -798,6 +846,8 @@ function GanttRow({
   cellWidth,
   gridWidth,
   fechaInicio,
+  colWidths,
+  leftWidth,
   onUpdatePercent,
   onSelectProject,
   colapsada,
@@ -808,6 +858,8 @@ function GanttRow({
   cellWidth: number;
   gridWidth: number;
   fechaInicio: Date;
+  colWidths: Record<string, number>;
+  leftWidth: number;
   onUpdatePercent?: (proyectoId: string, percent: number) => void;
   onSelectProject?: (proyectoId: string) => void;
   colapsada?: boolean;
@@ -835,7 +887,7 @@ function GanttRow({
       : tarea.tipo === 'TAREA'
       ? '#64748b'
       : '#94a3b8');
-  // Geometría de barra por nivel
+  // GeometrÃ­a de barra por nivel
   const barTop =
     tarea.tipo === 'PROYECTO' ? 12 : tarea.tipo === 'ACTIVIDAD' ? 13 : tarea.tipo === 'TAREA' ? 15 : 13;
   const barHeight =
@@ -872,27 +924,27 @@ function GanttRow({
     <div className="flex border-b" style={{ height: GANTT_ROW_HEIGHT }}>
       {/* ===== Columna fija: tabla de tareas completa (estilo MS Project) ===== */}
       <div
-        className="sticky left-0 z-20 flex flex-shrink-0 items-stretch border-r shadow-[4px_0_6px_-4px_rgba(0,0,0,0.15)]"
-        style={{ width: GANTT_LEFT_WIDTH, height: GANTT_ROW_HEIGHT }}
+        className="sticky left-0 z-20 flex flex-shrink-0 items-stretch border-r bg-card shadow-[4px_0_6px_-4px_rgba(0,0,0,0.15)]"
+        style={{ width: leftWidth, height: GANTT_ROW_HEIGHT }}
       >
-        {/* N° */}
+        {/* NÂ° */}
         <div
           className={cn(
             'flex flex-shrink-0 items-center justify-center border-r px-1 text-xs tabular-nums text-muted-foreground',
             esProyecto && 'bg-muted/50 font-semibold'
           )}
-          style={{ width: GANTT_COLS.num }}
+          style={{ width: colWidths.num }}
         >
           {row.index + 1}
         </div>
 
-        {/* Nombre de la tarea (con jerarquía y flechita de colapso) */}
+        {/* Nombre de la tarea (con jerarquÃ­a y flechita de colapso) */}
         <div
           className={cn(
             'flex min-w-0 flex-shrink-0 cursor-pointer flex-col justify-center border-r px-2',
             esProyecto && 'bg-muted/50'
           )}
-          style={{ width: GANTT_COLS.nombre, paddingLeft: 8 + depth * 14 }}
+          style={{ width: colWidths.nombre, paddingLeft: 8 + depth * 14 }}
           onClick={() => esProyecto && onSelectProject?.(tarea.proyectoId)}
           title={tarea.nombre}
         >
@@ -919,7 +971,7 @@ function GanttRow({
             {esProyecto ? (
               <>
                 <span className={cn('truncate text-sm leading-tight', esSubproyecto ? 'font-semibold' : 'font-bold')}>
-                  {esSubproyecto ? '↳ ' : ''}
+                  {esSubproyecto ? 'â†³ ' : ''}
                   {tarea.nombre}
                 </span>
                 {colapsada && row.totalHijos > 0 && (
@@ -935,14 +987,14 @@ function GanttRow({
               </>
             ) : (
               <span className="truncate text-xs leading-tight text-muted-foreground">
-                {'· '}
+                {'Â· '}
                 {tarea.nombre}
               </span>
             )}
           </div>
           {esProyecto && tarea.esCritica && (
             <span className="w-fit rounded bg-red-100 px-1 text-[9px] font-semibold leading-tight text-red-700">
-              RUTA CRÍTICA
+              RUTA CRÃTICA
             </span>
           )}
         </div>
@@ -950,7 +1002,7 @@ function GanttRow({
         {/* Estado */}
         <div
           className={cn('flex flex-shrink-0 items-center border-r px-1.5', esProyecto && 'bg-muted/50')}
-          style={{ width: GANTT_COLS.estado }}
+          style={{ width: colWidths.estado }}
         >
           <Badge variant={estadoVariant} className="truncate px-1.5 py-0 text-[9px]">
             {esWBS ? estadoLabel : (tarea.estado ?? '-')}
@@ -963,7 +1015,7 @@ function GanttRow({
             'flex min-w-0 flex-shrink-0 items-center border-r px-2',
             esProyecto && 'bg-muted/50'
           )}
-          style={{ width: GANTT_COLS.asignado }}
+          style={{ width: colWidths.asignado }}
           title={tarea.recursos ?? ''}
         >
           <span className="truncate text-xs">{tarea.recursos ?? '-'}</span>
@@ -975,40 +1027,40 @@ function GanttRow({
             'flex flex-shrink-0 items-center border-r px-1.5 text-xs tabular-nums',
             esProyecto && 'bg-muted/50'
           )}
-          style={{ width: GANTT_COLS.inicio }}
+          style={{ width: colWidths.inicio }}
         >
           {format(parseISO(tarea.fechaInicio), 'dd/MM/yy')}
         </div>
 
-        {/* Fecha término */}
+        {/* Fecha tÃ©rmino */}
         <div
           className={cn(
             'flex flex-shrink-0 items-center border-r px-1.5 text-xs tabular-nums',
             esProyecto && 'bg-muted/50'
           )}
-          style={{ width: GANTT_COLS.termino }}
+          style={{ width: colWidths.termino }}
         >
           {format(parseISO(tarea.fechaFin), 'dd/MM/yy')}
         </div>
 
-        {/* Duración (días) */}
+        {/* DuraciÃ³n (dÃ­as) */}
         <div
           className={cn(
             'flex flex-shrink-0 items-center justify-center border-r px-1 text-xs tabular-nums text-muted-foreground',
             esProyecto && 'bg-muted/50'
           )}
-          style={{ width: GANTT_COLS.duracion }}
+          style={{ width: colWidths.duracion }}
         >
           {spanDias}d
         </div>
 
-        {/* % Avance (editable en proyectos — decisión e) */}
+        {/* % Avance (editable en proyectos â€” decisiÃ³n e) */}
         <div
           className={cn(
             'flex flex-shrink-0 flex-col items-center justify-center gap-0.5 border-r px-1',
             esProyecto && 'bg-muted/50'
           )}
-          style={{ width: GANTT_COLS.avance }}
+          style={{ width: colWidths.avance }}
         >
           {esProyecto && onUpdatePercent ? (
             editingPercent ? (
@@ -1056,7 +1108,7 @@ function GanttRow({
             'flex min-w-0 flex-shrink-0 items-center px-2',
             esProyecto && 'bg-muted/50'
           )}
-          style={{ width: GANTT_COLS.comentarios }}
+          style={{ width: colWidths.comentarios }}
           title={tarea.notas ?? ''}
         >
           <span className="truncate text-xs text-muted-foreground">{tarea.notas ?? ''}</span>
@@ -1095,7 +1147,7 @@ function GanttRow({
             backgroundColor: barColor,
             zIndex: 10,
           }}
-          title={`${tarea.nombre}\n${tarea.fechaInicio} → ${tarea.fechaFin} · ${tarea.percentComplete}%${tarea.esCritica ? '\n⚠️ Ruta crítica' : ''}`}
+          title={`${tarea.nombre}\n${tarea.fechaInicio} â†’ ${tarea.fechaFin} Â· ${tarea.percentComplete}%${tarea.esCritica ? '\nâš ï¸ Ruta crÃ­tica' : ''}`}
         >
           {/* Relleno de avance */}
           <div

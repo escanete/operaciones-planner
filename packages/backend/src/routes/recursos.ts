@@ -141,12 +141,22 @@ recursosRoutes.delete('/:id', async (c) => {
   }
 
   const { id } = c.req.param();
-  await prisma.recurso.update({
-    where: { id },
-    data: { activo: false },
+
+  // Borrado REAL en cascada (las FK eliminan asignaciones, disponibilidades,
+  // ausencias y asignaciones a tareas del WBS; usuario.recursoId y
+  // equipo.liderId quedan en null)
+  const eliminado = await prisma.$transaction(async (tx) => {
+    const [asignaciones, disponibilidades, ausencias, tareasWbs] = await Promise.all([
+      tx.asignacion.count({ where: { recursoId: id } }),
+      tx.disponibilidad.count({ where: { recursoId: id } }),
+      tx.ausencia.count({ where: { recursoId: id } }),
+      tx.tareaAsignado.count({ where: { recursoId: id } }),
+    ]);
+    await tx.recurso.delete({ where: { id } });
+    return { asignaciones, disponibilidades, ausencias, tareasWbs };
   });
 
-  return c.json({ success: true });
+  return c.json({ success: true, eliminado });
 });
 
 // Disponibilidad

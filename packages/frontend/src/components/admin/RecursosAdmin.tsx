@@ -57,8 +57,35 @@ export function RecursosAdmin() {
   };
 
   const handleDelete = async (id: string) => {
-    if (confirm('¿Eliminar este recurso? (quedará inactivo)')) {
-      await deleteMutation.mutateAsync(id);
+    const ok = confirm(
+      '⚠️ ELIMINAR RECURSO (borrado real)\n\n' +
+        'Se eliminarán también permanentemente:\n' +
+        '• Todas sus asignaciones en la planificación\n' +
+        '• Sus asignaciones a tareas del WBS\n' +
+        '• Disponibilidades y ausencias\n\n' +
+        'El usuario asociado (si tiene cuenta) NO se elimina, solo se desvincula.\n\n' +
+        'Esta acción NO se puede deshacer. ¿Continuar?'
+    );
+    if (!ok) return;
+    try {
+      const res = (await deleteMutation.mutateAsync(id)) as {
+        eliminado?: {
+          asignaciones: number;
+          disponibilidades: number;
+          ausencias: number;
+          tareasWbs: number;
+        };
+      };
+      const e = res?.eliminado;
+      if (e) {
+        alert(
+          `Recurso eliminado.\n\nAsignaciones eliminadas: ${e.asignaciones}\n` +
+            `Asignaciones WBS eliminadas: ${e.tareasWbs}\n` +
+            `Disponibilidades eliminadas: ${e.disponibilidades}\nAusencias eliminadas: ${e.ausencias}`
+        );
+      }
+    } catch (err) {
+      alert(`No se pudo eliminar: ${(err as Error).message}`);
     }
   };
 

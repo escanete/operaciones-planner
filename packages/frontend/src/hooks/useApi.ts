@@ -299,7 +299,12 @@ export function useDeleteRecurso() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => api.delete(`/api/recursos/${id}`),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['recursos'] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['recursos'] });
+      queryClient.invalidateQueries({ queryKey: ['planning-grid'] });
+      queryClient.invalidateQueries({ queryKey: ['project-gantt'] });
+      queryClient.invalidateQueries({ queryKey: ['proyecto-wbs'] });
+    },
   });
 }
 

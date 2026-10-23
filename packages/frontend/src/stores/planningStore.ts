@@ -27,6 +27,7 @@ interface PlanningState {
   setViewMode: (mode: ViewMode) => void;
   setTimeScale: (scale: TimeScale) => void;
   navigateDate: (direction: 'prev' | 'next' | 'today') => void;
+  goToDate: (date: Date | string) => void;
   setFilters: (filters: Partial<PlanningFilters>) => void;
   clearFilters: () => void;
   setRoleHierarchy: (hierarchy: Record<number, string>) => void;
@@ -60,7 +61,7 @@ export const usePlanningStore = create<PlanningState>((set, get) => ({
   
   navigateDate: (direction) => {
     const { startDate, timeScale } = get();
-    
+
     if (direction === 'today') {
       const today = new Date();
       const { start } = getDateRange(today, timeScale);
@@ -68,23 +69,38 @@ export const usePlanningStore = create<PlanningState>((set, get) => ({
       return;
     }
 
-    const days = {
-      day: 1,
-      week: 7,
-      fortnight: 14,
-      month: 30,
-      quarter: 90,
-      year: 365,
-    }[timeScale];
-
+    // Navegación por periodos calendario reales (evita el bug de meses
+    // de 31 días / trimestres / años bisiestos donde la vista no avanzaba)
+    const n = direction === 'prev' ? -1 : 1;
     const newDate = new Date(startDate);
-    if (direction === 'prev') {
-      newDate.setDate(newDate.getDate() - days);
-    } else {
-      newDate.setDate(newDate.getDate() + days);
+    switch (timeScale) {
+      case 'day':
+        newDate.setDate(newDate.getDate() + n);
+        break;
+      case 'week':
+        newDate.setDate(newDate.getDate() + 7 * n);
+        break;
+      case 'fortnight':
+        newDate.setDate(newDate.getDate() + 14 * n);
+        break;
+      case 'month':
+        newDate.setMonth(newDate.getMonth() + n);
+        break;
+      case 'quarter':
+        newDate.setMonth(newDate.getMonth() + 3 * n);
+        break;
+      case 'year':
+        newDate.setFullYear(newDate.getFullYear() + n);
+        break;
     }
 
     const { start } = getDateRange(newDate, timeScale);
+    set({ startDate: start });
+  },
+
+  goToDate: (date) => {
+    const { timeScale } = get();
+    const { start } = getDateRange(new Date(date), timeScale);
     set({ startDate: start });
   },
   

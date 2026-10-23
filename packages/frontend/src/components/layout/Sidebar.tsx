@@ -15,19 +15,9 @@ export function Sidebar() {
   const { data: tiposActividad } = useTiposActividad();
   const { data: recursos } = useRecursos({ tipo: 'PERSONA', activo: true });
 
-  if (!sidebarOpen) {
-    return (
-      <Button
-        variant="ghost"
-        size="icon"
-        className="absolute left-2 top-16 z-50"
-        onClick={() => setSidebarOpen(true)}
-      >
-        <span className="sr-only">Abrir sidebar</span>
-        →
-      </Button>
-    );
-  }
+  // Cerrado: no renderizar nada. Se reabre desde el botón "Filtros"
+  // del toolbar de Planificación (evitaba solaparse con la flecha del período).
+  if (!sidebarOpen) return null;
 
   const activeFiltersCount = Object.values(filters).filter(Boolean).length;
 

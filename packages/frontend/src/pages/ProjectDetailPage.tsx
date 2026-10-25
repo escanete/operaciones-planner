@@ -12,6 +12,7 @@ import {
   Loader2,
   Pencil,
   Plus,
+  Star,
   Trash2,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
@@ -30,6 +31,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { useAuthStore } from '@/stores/authStore';
+import { api } from '@/services/api';
 import {
   useProyectoWBS,
   useRecursos,
@@ -69,6 +71,7 @@ export function ProjectDetailPage() {
   const { proyectoId } = useParams<{ proyectoId: string }>();
   const navigate = useNavigate();
   const { user } = useAuthStore();
+  const queryClient = useQueryClient();
 
   const { data, isLoading, error } = useProyectoWBS(proyectoId ?? '');
   const { data: recursos } = useRecursos({ tipo: 'PERSONA', activo: true });
@@ -91,6 +94,18 @@ export function ProjectDetailPage() {
       else next.add(key);
       return next;
     });
+  };
+
+  const toggleRelevanteProyecto = async () => {
+    if (!proyectoId || !data) return;
+    try {
+      await api.put(`/api/proyectos/${proyectoId}`, { relevante: !data.proyecto.relevante });
+      queryClient.invalidateQueries({ queryKey: ['proyecto-wbs', proyectoId] });
+      queryClient.invalidateQueries({ queryKey: ['project-gantt'] });
+      queryClient.invalidateQueries({ queryKey: ['proyectos'] });
+    } catch (err) {
+      alert('No se pudo actualizar: ' + (err instanceof Error ? err.message : String(err)));
+    }
   };
 
   const handleExport = async () => {
@@ -144,7 +159,28 @@ export function ProjectDetailPage() {
             <ArrowLeft className="h-4 w-4" />
           </Button>
           <div className="min-w-0">
-            <h1 className="truncate text-lg font-semibold">{data?.proyecto.nombre ?? 'Proyecto'}</h1>
+            <h1 className="flex items-center gap-1.5 truncate text-lg font-semibold">
+              {data?.proyecto.nombre ?? 'Proyecto'}
+              {canWBS && (
+                <button
+                  className={cn(
+                    'shrink-0 rounded p-0.5 transition-colors hover:bg-accent',
+                    data?.proyecto.relevante ? 'text-amber-500' : 'text-muted-foreground/40'
+                  )}
+                  title={
+                    data?.proyecto.relevante
+                      ? 'Quitar marcación de relevancia'
+                      : 'Marcar proyecto como relevante'
+                  }
+                  onClick={toggleRelevanteProyecto}
+                >
+                  <Star
+                    className="h-4 w-4"
+                    fill={data?.proyecto.relevante ? 'currentColor' : 'none'}
+                  />
+                </button>
+              )}
+            </h1>
             <div className="flex items-center gap-2">
               <Badge variant="secondary" className="text-[10px]">{data?.proyecto.estado}</Badge>
               {data && (
@@ -286,6 +322,7 @@ function ActividadCard({
   const deleteSubtarea = useDeleteSubtarea(actividad.proyectoId);
   const updateSubtarea = useUpdateSubtarea(actividad.proyectoId);
   const updateTarea = useUpdateTarea(actividad.proyectoId);
+  const updateActividad = useUpdateActividad(actividad.proyectoId);
 
   const isCollapsed = collapsed.has(`a-${actividad.id}`);
   const percent = Math.round(actividad.percentComplete);
@@ -324,6 +361,17 @@ function ActividadCard({
 
         {canWBS && (
           <div className="flex shrink-0 items-center gap-1">
+            <Button
+              variant="ghost"
+              size="icon"
+              className={cn('h-7 w-7', !actividad.relevante && 'text-muted-foreground/40')}
+              title={actividad.relevante ? 'Quitar relevancia' : 'Marcar como relevante'}
+              onClick={() =>
+                updateActividad.mutate({ id: actividad.id, data: { relevante: !actividad.relevante } })
+              }
+            >
+              <Star className="h-3.5 w-3.5" fill={actividad.relevante ? 'currentColor' : 'none'} />
+            </Button>
             <Button
               variant="ghost"
               size="sm"
@@ -422,6 +470,17 @@ function ActividadCard({
                     <div className="flex shrink-0 items-center gap-1">
                       <Button
                         variant="ghost"
+                        size="icon"
+                        className={cn('h-7 w-7', !tarea.relevante && 'text-muted-foreground/40')}
+                        title={tarea.relevante ? 'Quitar relevancia' : 'Marcar como relevante'}
+                        onClick={() =>
+                          updateTarea.mutate({ id: tarea.id, data: { relevante: !tarea.relevante } })
+                        }
+                      >
+                        <Star className="h-3.5 w-3.5" fill={tarea.relevante ? 'currentColor' : 'none'} />
+                      </Button>
+                      <Button
+                        variant="ghost"
                         size="sm"
                         className="h-7 px-2 text-xs"
                         onClick={() =>
@@ -484,6 +543,20 @@ function ActividadCard({
                       </p>
                       {puedeEditarSub && (
                         <div className="flex shrink-0 items-center gap-1">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className={cn('h-6 w-6', !subtarea.relevante && 'text-muted-foreground/40')}
+                            title={subtarea.relevante ? 'Quitar relevancia' : 'Marcar como relevante'}
+                            onClick={() =>
+                              updateSubtarea.mutate({
+                                id: subtarea.id,
+                                data: { relevante: !subtarea.relevante },
+                              })
+                            }
+                          >
+                            <Star className="h-3 w-3" fill={subtarea.relevante ? 'currentColor' : 'none'} />
+                          </Button>
                           <Button
                             variant="ghost"
                             size="icon"

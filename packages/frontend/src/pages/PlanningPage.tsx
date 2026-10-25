@@ -10,10 +10,10 @@ import { AssignmentFormDialog } from '@/components/planning/AssignmentFormDialog
 import { AssignmentDetailPanel } from '@/components/planning/AssignmentDetailPanel';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { CalendarDays, ChevronLeft, ChevronRight, Columns3, GanttChartSquare, Plus, SlidersHorizontal } from 'lucide-react';
-import { format } from 'date-fns';
+import { CalendarCheck, CalendarDays, ChevronLeft, ChevronRight, Columns3, GanttChartSquare, Plus, SlidersHorizontal } from 'lucide-react';
+import { addDays, format, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
-import type { Asignacion, ConflictInfo, TimeScale } from '@operaciones-planner/shared';
+import type { Asignacion, ConflictInfo, GanttTaskItem, TimeScale } from '@operaciones-planner/shared';
 import { cn } from '@/lib/utils';
 
 export function PlanningPage() {
@@ -28,6 +28,8 @@ export function PlanningPage() {
     setTimeScale,
     navigateDate,
     goToDate,
+    soloHabiles,
+    setSoloHabiles,
     selectAssignment,
     setSidebarOpen,
   } = usePlanningStore();
@@ -92,6 +94,35 @@ export function PlanningPage() {
 
   const handleUpdatePercent = (proyectoId: string, percent: number) => {
     updateAvance.mutate({ id: proyectoId, percentComplete: percent });
+  };
+
+  // ===== Arrastre de barras en el Gantt: reprogramar proyecto/actividad/tarea =====
+  const handleMoveTask = async (tarea: GanttTaskItem, dias: number) => {
+    const nuevaInicio = format(addDays(parseISO(tarea.fechaInicio), dias), 'yyyy-MM-dd');
+    const nuevaFin = format(addDays(parseISO(tarea.fechaFin), dias), 'yyyy-MM-dd');
+    try {
+      if (tarea.tipo === 'PROYECTO') {
+        await api.put(`/api/proyectos/${tarea.id}`, {
+          scheduledStart: nuevaInicio,
+          scheduledEnd: nuevaFin,
+        });
+      } else if (tarea.tipo === 'ACTIVIDAD') {
+        await api.put(`/api/actividades/${tarea.id}`, {
+          fechaInicio: nuevaInicio,
+          fechaFin: nuevaFin,
+        });
+      } else if (tarea.tipo === 'TAREA') {
+        await api.put(`/api/actividades/tarea/${tarea.id}`, {
+          fechaInicio: nuevaInicio,
+          fechaFin: nuevaFin,
+        });
+      } else {
+        return; // las asignaciones se mueven desde la vista de recursos
+      }
+      await queryClient.invalidateQueries({ queryKey: ['project-gantt'] });
+    } catch (err) {
+      alert('No se pudo reprogramar: ' + (err instanceof Error ? err.message : String(err)));
+    }
   };
 
   const title = useMemo(() => {
@@ -181,6 +212,21 @@ export function PlanningPage() {
                   }}
                 />
               </div>
+              {/* Solo días hábiles: excluye findes de semana de la duración */}
+              <Button
+                variant={soloHabiles ? 'secondary' : 'ghost'}
+                size="sm"
+                className="h-8 gap-1.5 px-2 text-xs"
+                onClick={() => setSoloHabiles(!soloHabiles)}
+                title={
+                  soloHabiles
+                    ? 'Días hábiles: la duración excluye sábados y domingos (los findes se muestran rayados)'
+                    : 'Activar para contar solo días hábiles (sin findes de semana)'
+                }
+              >
+                <CalendarCheck className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">Días hábiles</span>
+              </Button>
             </div>
 
             <h1 className="text-lg font-semibold">{title}</h1>
@@ -255,6 +301,8 @@ export function PlanningPage() {
                 fechaFin={end}
                 onUpdatePercent={handleUpdatePercent}
                 onSelectProject={(id) => navigate(`/proyectos/${id}`)}
+                onMoveTask={puedeMover ? handleMoveTask : undefined}
+                canMoveTask={puedeMover}
               />
             )
           ) : isLoading ? (

@@ -102,6 +102,7 @@ export interface Proyecto {
   percentComplete?: number;
   subprojectId?: string;
   dependencies?: string; // JSON string con IDs de predecesores
+  relevante: boolean; // marcación manual de importancia (reemplaza ruta crítica automática)
 }
 
 // ============================================
@@ -377,6 +378,7 @@ export interface Subtarea {
   descripcion?: string;
   orden: number;
   completada: boolean; // checkbox 0/100
+  relevante: boolean;
   asignaciones?: AsignacionResumen[];
   createdAt: Date;
   updatedAt: Date;
@@ -411,6 +413,7 @@ export interface Tarea {
   fechaFin?: Date;
   completada: boolean; // checkbox directo si no tiene subtareas
   percentComplete: number; // roll-up de subtareas o 0/100
+  relevante: boolean;
   subtareas?: Subtarea[];
   asignados?: TareaAsignado[];
   asignaciones?: AsignacionResumen[];
@@ -427,6 +430,7 @@ export interface Actividad {
   fechaInicio?: Date;
   fechaFin?: Date;
   percentComplete: number; // promedio automático de tareas
+  relevante: boolean;
   tareas?: Tarea[];
   asignaciones?: AsignacionResumen[];
   createdAt: Date;
@@ -439,6 +443,7 @@ export interface ProyectoWBSResponse {
     nombre: string;
     estado: ProyectoEstado;
     percentComplete: number;
+    relevante: boolean;
   };
   actividades: Actividad[];
   // Asignaciones de planificación sin vínculo WBS (cuelgan directo del proyecto)
@@ -449,6 +454,32 @@ export interface ProyectoWBSResponse {
     totalSubtareas: number;
     totalAsignaciones: number;
   };
+}
+
+// ============================================
+// IMPORTACIÓN MS PROJECT (XML)
+// ============================================
+
+export interface MsProjectImportPreview {
+  preview: true;
+  nombreProyecto: string;
+  fechaInicio?: string;
+  fechaFin?: string;
+  totalActividades: number;
+  totalTareas: number;
+  totalSubtareas: number;
+  recursosExistentes: number;
+  recursosFaltantes: string[];
+}
+
+export interface MsProjectImportResult {
+  proyectoId: string;
+  nombre: string;
+  actividades: number;
+  tareas: number;
+  subtareas: number;
+  asignaciones: number;
+  recursosCreados: string[];
 }
 
 // ============================================

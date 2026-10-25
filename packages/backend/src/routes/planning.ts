@@ -426,7 +426,7 @@ planningRoutes.get('/gantt', async (c) => {
           undefined,
         notas: p.descripcion ?? undefined,
         estado: p.estado as GanttTaskItem['estado'],
-        esCritica: false,
+        esCritica: p.relevante, // marcación manual de relevancia (ya no se calcula ruta crítica)
       });
 
       // Filas hijas: una por asignación (colgada de su nodo WBS vinculado)
@@ -492,7 +492,7 @@ planningRoutes.get('/gantt', async (c) => {
           dependencies: [],
           notas: a.descripcion ?? undefined,
           estado: undefined,
-          esCritica: false,
+          esCritica: a.relevante,
         };
         actTaskById.set(a.id, actTask);
 
@@ -512,68 +512,14 @@ planningRoutes.get('/gantt', async (c) => {
             undefined,
           notas: t.descripcion ?? undefined,
           estado: undefined,
-          esCritica: false,
+          esCritica: t.relevante,
         }));
         wbsTareasPorActividad.set(a.id, tareasDelGantt);
       });
     });
 
-    // ===== Ruta crítica (solo entre proyectos, fin→inicio) =====
-    // Forward pass: ES/EF por orden topológico implícito (iterativo)
-    const es = new Map<string, number>(); // earliest start (ms)
-    const ef = new Map<string, number>(); // earliest finish (ms)
-    const duration = new Map<string, number>();
-    projectTasks.forEach((t) => {
-      const s = new Date(t.fechaInicio + 'T00:00:00').getTime();
-      const e = new Date(t.fechaFin + 'T00:00:00').getTime();
-      duration.set(t.id, Math.max(e - s, 0));
-      es.set(t.id, s);
-      ef.set(t.id, e);
-    });
-    // Iterar hasta estabilizar (dependencias entre proyectos)
-    for (let i = 0; i < projectTasks.size; i++) {
-      let changed = false;
-      projectTasks.forEach((t) => {
-        for (const depId of t.dependencies) {
-          if (!ef.has(depId)) continue;
-          const newEs = Math.max(es.get(t.id)!, ef.get(depId)! + 86400000); // FS + 1 día
-          if (newEs > es.get(t.id)!) {
-            es.set(t.id, newEs);
-            ef.set(t.id, newEs + duration.get(t.id)!);
-            changed = true;
-          }
-        }
-      });
-      if (!changed) break;
-    }
-    const projectEnd = Math.max(...Array.from(ef.values()), 0);
-    // Backward pass: LF/LS
-    const lf = new Map<string, number>();
-    const ls = new Map<string, number>();
-    projectTasks.forEach((t) => {
-      lf.set(t.id, projectEnd);
-      ls.set(t.id, projectEnd - duration.get(t.id)!);
-    });
-    for (let i = 0; i < projectTasks.size; i++) {
-      let changed = false;
-      projectTasks.forEach((t) => {
-        for (const depId of t.dependencies) {
-          if (!projectTasks.has(depId)) continue;
-          const newLf = ls.get(t.id)! - 86400000; // FS + 1 día
-          if (newLf < lf.get(depId)!) {
-            lf.set(depId, newLf);
-            ls.set(depId, newLf - duration.get(depId)!);
-            changed = true;
-          }
-        }
-      });
-      if (!changed) break;
-    }
-    // Crítica: holgura 0
-    projectTasks.forEach((t) => {
-      const slack = ls.get(t.id)! - es.get(t.id)!;
-      t.esCritica = slack <= 0 && projectEnd > 0;
-    });
+    // (La ruta crítica automática se eliminó: ahora la relevancia se marca
+    // manualmente con el campo `relevante` en proyecto/actividad/tarea/subtarea)
 
     // ===== Ordenar: proyecto → actividades → tareas → asignaciones → subproyectos =====
     const ordered: GanttTaskItem[] = [];

@@ -19,6 +19,8 @@ interface PlanningState {
   sidebarOpen: boolean;
   bottomPanel: 'detail' | 'conflicts' | 'logistics' | null;
   assignmentModalOpen: boolean;
+  // Contar solo días hábiles (excluye sábados y domingos)
+  soloHabiles: boolean;
   
   // Drag & Drop
   draggingAssignmentId: string | null;
@@ -36,6 +38,7 @@ interface PlanningState {
   setBottomPanel: (panel: 'detail' | 'conflicts' | 'logistics' | null) => void;
   setDraggingAssignment: (id: string | null) => void;
   setAssignmentModalOpen: (open: boolean) => void;
+  setSoloHabiles: (solo: boolean) => void;
   getDateRange: () => { start: Date; end: Date };
 }
 
@@ -50,6 +53,9 @@ export const usePlanningStore = create<PlanningState>((set, get) => ({
   bottomPanel: null,
   draggingAssignmentId: null,
   assignmentModalOpen: false,
+  soloHabiles: false,
+
+  setSoloHabiles: (soloHabiles) => set({ soloHabiles }),
 
   setViewMode: (viewMode) => set({ viewMode }),
   

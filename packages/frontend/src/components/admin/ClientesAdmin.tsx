@@ -84,9 +84,26 @@ export function ClientesAdmin() {
                       <Button
                         variant="ghost"
                         size="icon"
+                        title="Eliminar cliente (borrado real)"
                         onClick={async () => {
-                          if (confirm('¿Eliminar cliente?')) {
-                            await deleteMutation.mutateAsync(c.id);
+                          const ok = confirm(
+                            '⚠️ ELIMINAR CLIENTE (borrado real)\n\n' +
+                              'Si tiene proyectos asociados, estos NO se eliminan:\n' +
+                              'solo quedan sin cliente asignado.\n\n' +
+                              'Esta acción no se puede deshacer. ¿Continuar?'
+                          );
+                          if (!ok) return;
+                          try {
+                            const res = (await deleteMutation.mutateAsync(c.id)) as {
+                              eliminado?: { proyectosDesvinculados: number };
+                            };
+                            if (res?.eliminado && res.eliminado.proyectosDesvinculados > 0) {
+                              alert(
+                                `Cliente eliminado.\n${res.eliminado.proyectosDesvinculados} proyecto(s) quedaron sin cliente.`
+                              );
+                            }
+                          } catch (err) {
+                            alert('No se pudo eliminar: ' + (err as Error).message);
                           }
                         }}
                       >

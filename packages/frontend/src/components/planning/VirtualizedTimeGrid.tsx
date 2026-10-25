@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useMemo, useState, type MouseEvent as ReactMouseEvent } from 'react';
 import { format, addDays, isSameDay, isWeekend, parseISO, differenceInCalendarDays } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { AlertTriangle, ChevronDown, ChevronRight, ChevronsDownUp, ChevronsUpDown, Plus } from 'lucide-react';
+import { AlertTriangle, ChevronDown, ChevronRight, ChevronsDownUp, ChevronsUpDown, Plus, Star } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { getContrastColor } from '@operaciones-planner/shared';
 import { Badge } from '@/components/ui/badge';
@@ -57,7 +57,7 @@ export function VirtualizedTimeGrid({
   onQuickCreate,
   onMoveAssignment,
 }: GridProps) {
-  const { timeScale, draggingAssignmentId, setDraggingAssignment } = usePlanningStore();
+  const { timeScale, soloHabiles, draggingAssignmentId, setDraggingAssignment } = usePlanningStore();
   const [hoverCell, setHoverCell] = useState<string | null>(null);
   // Recursos expandidos: clic en el nombre despliega sus actividades como sub-filas
   const [expandedRecursos, setExpandedRecursos] = useState<Set<string>>(new Set());
@@ -417,6 +417,7 @@ export function VirtualizedTimeGrid({
                         className={cn(
                           'group h-full flex-shrink-0 border-r border-border/40',
                           isWeekend(dia) && 'bg-muted/40',
+                          isWeekend(dia) && soloHabiles && WEEKEND_STRIPES,
                           isSameDay(dia, new Date()) && 'bg-primary/5',
                           onQuickCreate && 'cursor-pointer hover:bg-accent/50',
                           draggingAssignmentId && 'cursor-move',
@@ -615,6 +616,8 @@ interface GanttProps {
   fechaFin: Date;
   onUpdatePercent?: (proyectoId: string, percent: number) => void;
   onSelectProject?: (proyectoId: string) => void;
+  onMoveTask?: (tarea: GanttTaskItem, dias: number) => void;
+  canMoveTask?: boolean;
 }
 
 export function ProjectGanttView({
@@ -623,6 +626,8 @@ export function ProjectGanttView({
   fechaFin,
   onUpdatePercent,
   onSelectProject,
+  onMoveTask,
+  canMoveTask,
 }: GanttProps) {
   const { timeScale } = usePlanningStore();
   const [collapsedIds, setCollapsedIds] = useState<Set<string>>(new Set());
@@ -888,6 +893,8 @@ export function ProjectGanttView({
             leftWidth={leftWidth}
             onUpdatePercent={onUpdatePercent}
             onSelectProject={onSelectProject}
+            onMoveTask={onMoveTask}
+            canMoveTask={canMoveTask}
             colapsada={collapsedIds.has(row.tarea.id)}
             onToggleCollapse={() => toggleCollapse(row.tarea.id)}
           />
@@ -918,10 +925,10 @@ export function ProjectGanttView({
                 d={p.d}
                 fill="none"
                 strokeWidth={1.5}
-                stroke={p.critica ? '#dc2626' : 'currentColor'}
-                className={p.critica ? '' : 'text-muted-foreground'}
+                stroke="currentColor"
+                className="text-muted-foreground"
                 markerEnd="url(#gantt-arrow)"
-                opacity={p.critica ? 0.9 : 0.55}
+                opacity={0.55}
               />
             ))}
           </svg>
@@ -930,6 +937,25 @@ export function ProjectGanttView({
     </div>
   );
 }
+
+// Días hábiles entre dos fechas (excluye sábados y domingos), inclusivo
+function contarDiasHabiles(start: Date, end: Date): number {
+  let n = 0;
+  const d = new Date(start);
+  d.setHours(0, 0, 0, 0);
+  const fin = new Date(end);
+  fin.setHours(0, 0, 0, 0);
+  while (d <= fin) {
+    const dow = d.getDay();
+    if (dow !== 0 && dow !== 6) n++;
+    d.setDate(d.getDate() + 1);
+  }
+  return Math.max(n, 1);
+}
+
+// Rayado diagonal para fines de semana cuando "solo días hábiles" está activo
+const WEEKEND_STRIPES =
+  '[background-image:repeating-linear-gradient(45deg,rgba(0,0,0,0.07)_0,rgba(0,0,0,0.07)_4px,transparent_4px,transparent_8px)]';
 
 // Fila individual del Gantt (columna fija + barra)
 function GanttRow({
@@ -942,6 +968,8 @@ function GanttRow({
   leftWidth,
   onUpdatePercent,
   onSelectProject,
+  onMoveTask,
+  canMoveTask,
   colapsada,
   onToggleCollapse,
 }: {
@@ -954,18 +982,27 @@ function GanttRow({
   leftWidth: number;
   onUpdatePercent?: (proyectoId: string, percent: number) => void;
   onSelectProject?: (proyectoId: string) => void;
+  onMoveTask?: (tarea: GanttTaskItem, dias: number) => void;
+  canMoveTask?: boolean;
   colapsada?: boolean;
   onToggleCollapse?: () => void;
 }) {
   const { tarea, depth, tieneHijos } = row;
   const [editingPercent, setEditingPercent] = useState(false);
   const [percentDraft, setPercentDraft] = useState(String(tarea.percentComplete));
+  // Arrastre de barra: preview en días mientras se mueve
+  const [dragDays, setDragDays] = useState(0);
+  const soloHabiles = usePlanningStore((s) => s.soloHabiles);
 
   const startOffset = Math.max(0, differenceInCalendarDays(parseISO(tarea.fechaInicio), fechaInicio));
   const spanDias = Math.max(
     1,
     differenceInCalendarDays(parseISO(tarea.fechaFin), parseISO(tarea.fechaInicio)) + 1
   );
+  // Duración visible: días hábiles si el toggle está activo
+  const durVisible = soloHabiles
+    ? contarDiasHabiles(parseISO(tarea.fechaInicio), parseISO(tarea.fechaFin))
+    : spanDias;
 
   const esProyecto = tarea.tipo === 'PROYECTO';
   const esResumen = esProyecto || tarea.tipo === 'ACTIVIDAD';
@@ -991,6 +1028,31 @@ function GanttRow({
     if (!Number.isNaN(val) && val >= 0 && val <= 100 && val !== tarea.percentComplete) {
       onUpdatePercent?.(tarea.proyectoId, Math.round(val));
     }
+  };
+
+  // ===== Arrastre de barra: reprogramar proyecto/actividad/tarea =====
+  const puedeArrastrarBarra = !!canMoveTask && tarea.tipo !== 'ASIGNACION';
+  const handleBarMouseDown = (e: ReactMouseEvent) => {
+    if (!puedeArrastrarBarra || e.button !== 0) return;
+    e.preventDefault();
+    const startX = e.clientX;
+    const move = (ev: MouseEvent) => {
+      setDragDays(Math.round((ev.clientX - startX) / cellWidth));
+    };
+    const up = (ev: MouseEvent) => {
+      window.removeEventListener('mousemove', move);
+      window.removeEventListener('mouseup', up);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      const d = Math.round((ev.clientX - startX) / cellWidth);
+      setDragDays(0);
+      if (d !== 0) onMoveTask?.(tarea, d);
+      else if (tarea.tipo === 'PROYECTO') onSelectProject?.(tarea.proyectoId); // clic simple
+    };
+    document.body.style.cursor = 'grabbing';
+    document.body.style.userSelect = 'none';
+    window.addEventListener('mousemove', move);
+    window.addEventListener('mouseup', up);
   };
 
   const estadoVariant =
@@ -1084,9 +1146,13 @@ function GanttRow({
               </span>
             )}
           </div>
-          {esProyecto && tarea.esCritica && (
-            <span className="w-fit rounded bg-red-100 px-1 text-[9px] font-semibold leading-tight text-red-700">
-              RUTA CRÍTICA
+          {tarea.esCritica && (
+            <span
+              className="flex w-fit shrink-0 items-center gap-0.5 rounded bg-amber-100 px-1 text-[9px] font-semibold leading-tight text-amber-700"
+              title="Marcado como relevante manualmente"
+            >
+              <Star className="h-2.5 w-2.5" />
+              RELEVANTE
             </span>
           )}
         </div>
@@ -1135,15 +1201,16 @@ function GanttRow({
           {format(parseISO(tarea.fechaFin), 'dd/MM/yy')}
         </div>
 
-        {/* Duración (días) */}
+        {/* Duración (días totales o hábiles según el toggle) */}
         <div
           className={cn(
             'flex flex-shrink-0 items-center justify-center border-r px-1 text-xs tabular-nums text-muted-foreground',
             esProyecto && 'bg-muted/50'
           )}
           style={{ width: colWidths.duracion }}
+          title={soloHabiles ? 'Días hábiles (sin fines de semana)' : 'Días totales'}
         >
-          {spanDias}d
+          {durVisible}d{soloHabiles && durVisible !== spanDias ? '*' : ''}
         </div>
 
         {/* % Avance (editable en proyectos — decisión e) */}
@@ -1188,7 +1255,7 @@ function GanttRow({
           {/* Mini barra de progreso */}
           <div className="h-1 w-full overflow-hidden rounded-full bg-border/50">
             <div
-              className={cn('h-full rounded-full', tarea.esCritica ? 'bg-red-600' : 'bg-green-600')}
+              className={cn('h-full rounded-full', tarea.esCritica ? 'bg-amber-500' : 'bg-green-600')}
               style={{ width: `${tarea.percentComplete}%` }}
             />
           </div>
@@ -1217,6 +1284,7 @@ function GanttRow({
               className={cn(
                 'h-full flex-shrink-0 border-r border-border/40',
                 isWeekend(dia) && 'bg-muted/40',
+                isWeekend(dia) && soloHabiles && WEEKEND_STRIPES,
                 isSameDay(dia, new Date()) && 'bg-primary/5'
               )}
               style={{ width: cellWidth }}
@@ -1224,29 +1292,35 @@ function GanttRow({
           ))}
         </div>
 
-        {/* Barra */}
+        {/* Barra (arrastrable para reprogramar) */}
         <div
           className={cn(
-            'absolute flex items-center overflow-hidden rounded-[3px]',
+            'absolute flex items-center overflow-hidden rounded-[3px] transition-[left] duration-75',
             esProyecto ? 'font-bold' : '',
-            tarea.esCritica && 'ring-2 ring-red-600'
+            tarea.esCritica && 'ring-2 ring-amber-500',
+            puedeArrastrarBarra ? 'cursor-grab' : tarea.tipo === 'PROYECTO' ? 'cursor-pointer' : ''
           )}
           style={{
-            left: startOffset * cellWidth + 1,
+            left: (startOffset + dragDays) * cellWidth + 1,
             width: spanDias * cellWidth - 2,
             top: barTop,
             height: barHeight,
             backgroundColor: barColor,
             zIndex: 10,
+            opacity: dragDays !== 0 ? 0.75 : 1,
           }}
-          title={`${tarea.nombre}\n${tarea.fechaInicio} → ${tarea.fechaFin} · ${tarea.percentComplete}%${tarea.esCritica ? '\n⚠️ Ruta crítica' : ''}`}
+          onMouseDown={handleBarMouseDown}
+          onClick={() => {
+            if (!puedeArrastrarBarra && tarea.tipo === 'PROYECTO') onSelectProject?.(tarea.proyectoId);
+          }}
+          title={`${tarea.nombre}\n${tarea.fechaInicio} → ${tarea.fechaFin} · ${tarea.percentComplete}%${tarea.esCritica ? '\n★ Marcado como relevante' : ''}${puedeArrastrarBarra ? '\nArrastra para reprogramar' : tarea.tipo === 'PROYECTO' ? '\nClic para abrir el proyecto' : ''}`}
         >
           {/* Relleno de avance */}
           <div
             className="h-full"
             style={{
               width: `${tarea.percentComplete}%`,
-              backgroundColor: tarea.esCritica ? '#b91c1c' : '#15803d',
+              backgroundColor: tarea.esCritica ? '#d97706' : '#15803d',
               opacity: 0.85,
             }}
           />

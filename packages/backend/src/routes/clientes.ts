@@ -94,12 +94,16 @@ clientesRoutes.delete('/:id', async (c) => {
   }
 
   const { id } = c.req.param();
-  await prisma.cliente.update({
-    where: { id },
-    data: { activo: false },
+
+  // Borrado REAL: los proyectos quedan sin cliente (clienteId → null vía FK).
+  // (Antes era soft delete y el nombre @unique bloqueaba recrear el cliente)
+  const eliminado = await prisma.$transaction(async (tx) => {
+    const proyectosAsociados = await tx.proyecto.count({ where: { clienteId: id } });
+    await tx.cliente.delete({ where: { id } });
+    return { proyectosDesvinculados: proyectosAsociados };
   });
 
-  return c.json({ success: true });
+  return c.json({ success: true, eliminado });
 });
 
 export { clientesRoutes };

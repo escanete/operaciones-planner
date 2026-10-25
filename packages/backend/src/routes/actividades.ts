@@ -122,6 +122,7 @@ const actividadSchema = z.object({
   orden: z.number().int().default(0),
   fechaInicio: z.string().optional().nullable(),
   fechaFin: z.string().optional().nullable(),
+  relevante: z.boolean().optional().default(false),
 });
 
 const tareaSchema = z.object({
@@ -130,6 +131,7 @@ const tareaSchema = z.object({
   orden: z.number().int().default(0),
   fechaInicio: z.string().optional().nullable(),
   fechaFin: z.string().optional().nullable(),
+  relevante: z.boolean().optional().default(false),
   asignados: z.array(z.string()).optional().default([]), // recursoIds
 });
 
@@ -142,6 +144,7 @@ const subtareaSchema = z.object({
   descripcion: z.string().optional().nullable(),
   orden: z.number().int().default(0),
   completada: z.boolean().optional().default(false),
+  relevante: z.boolean().optional().default(false),
 });
 
 function toNullableDate(s: string | null | undefined): Date | null {
@@ -157,7 +160,7 @@ actividadesRoutes.get('/proyecto/:proyectoId', async (c) => {
 
   const proyecto = await prisma.proyecto.findUnique({
     where: { id: proyectoId },
-    select: { id: true, nombre: true, estado: true, percentComplete: true },
+    select: { id: true, nombre: true, estado: true, percentComplete: true, relevante: true },
   });
   if (!proyecto) return c.json({ error: 'Proyecto no encontrado' }, 404);
 
@@ -226,6 +229,13 @@ actividadesRoutes.get('/proyecto/:proyectoId', async (c) => {
     tareas: a.tareas.map((t) => ({
       ...t,
       asignaciones: porTarea.get(t.id) ?? [],
+      // Aplanar asignados al shape del tipo compartido TareaAsignado
+      asignados: (t.asignados ?? []).map((ta) => ({
+        id: ta.id,
+        recursoId: ta.recursoId,
+        nombre: ta.recurso.nombre,
+        apellido: ta.recurso.apellido,
+      })),
       subtareas: t.subtareas.map((s) => ({
         ...s,
         asignaciones: porSubtarea.get(s.id) ?? [],
@@ -306,6 +316,7 @@ actividadesRoutes.put('/:id', async (c) => {
       ...(data.orden !== undefined ? { orden: data.orden } : {}),
       ...(data.fechaInicio !== undefined ? { fechaInicio: toNullableDate(data.fechaInicio) } : {}),
       ...(data.fechaFin !== undefined ? { fechaFin: toNullableDate(data.fechaFin) } : {}),
+      ...(data.relevante !== undefined ? { relevante: data.relevante } : {}),
     },
   });
 
@@ -403,6 +414,7 @@ actividadesRoutes.put('/tarea/:id', async (c) => {
       ...(data.orden !== undefined ? { orden: data.orden } : {}),
       ...(data.fechaInicio !== undefined ? { fechaInicio: toNullableDate(data.fechaInicio) } : {}),
       ...(data.fechaFin !== undefined ? { fechaFin: toNullableDate(data.fechaFin) } : {}),
+      ...(data.relevante !== undefined ? { relevante: data.relevante } : {}),
       ...(puedeEditarCompletada && data.completada !== undefined ? { completada: data.completada } : {}),
     },
   });
@@ -491,6 +503,7 @@ actividadesRoutes.put('/subtarea/:id', async (c) => {
       ...(data.descripcion !== undefined ? { descripcion: data.descripcion ?? undefined } : {}),
       ...(data.orden !== undefined ? { orden: data.orden } : {}),
       ...(data.completada !== undefined ? { completada: data.completada } : {}),
+      ...(data.relevante !== undefined ? { relevante: data.relevante } : {}),
     },
   });
 

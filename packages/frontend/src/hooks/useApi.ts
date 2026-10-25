@@ -201,7 +201,11 @@ export function useDeleteCliente() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => api.delete(`/api/clientes/${id}`),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['clientes'] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['clientes'] });
+      queryClient.invalidateQueries({ queryKey: ['proyectos'] });
+      queryClient.invalidateQueries({ queryKey: ['project-gantt'] });
+    },
   });
 }
 

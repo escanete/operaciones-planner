@@ -118,7 +118,8 @@ model Proyecto {
   subprojectId     String?   // Proyecto padre (jerarquía sub-proyectos)
   subproyecto      Proyecto? @relation("ProyectoJerarquia", fields: [subprojectId], references: [id], onDelete: SetNull)
   subproyectos     Proyecto[] @relation("ProyectoJerarquia")
-  dependencies     String?   // JSON string con IDs de predecesores (SQLite no soporta Json nativo)
+  dependencies     String?  // JSON string con IDs de predecesores (SQLite no soporta Json nativo)
+  relevante        Boolean  @default(false) // Marcación manual de importancia (reemplaza la ruta crítica automática)
 
   @@index([clienteId])
   @@index([estado])
@@ -290,6 +291,7 @@ model Actividad {
   fechaFin     DateTime?
   // Avance: promedio automático de las tareas (0-100)
   percentComplete Float  @default(0)
+  relevante       Boolean @default(false) // marcación manual de importancia
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
@@ -312,6 +314,7 @@ model Tarea {
   // Checkbox directo cuando no tiene subtareas; con subtareas es promedio automático
   completada  Boolean   @default(false)
   percentComplete Float @default(0)
+  relevante   Boolean  @default(false) // marcación manual de importancia
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
@@ -331,6 +334,7 @@ model Subtarea {
   descripcion String?
   orden    Int    @default(0)
   completada Boolean @default(false)
+  relevante Boolean @default(false) // marcación manual de importancia
   asignaciones Asignacion[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

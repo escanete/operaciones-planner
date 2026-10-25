@@ -10,6 +10,12 @@ const asignacionSchema = z.object({
   proyectoId: z.string(),
   recursoId: z.string(),
   tipoActividadId: z.string(),
+  // Nombre de la actividad: qué hace específicamente la persona
+  nombre: z.string().max(200).optional().nullable(),
+  // Vinculación WBS opcional (actividad / tarea / subtarea del proyecto)
+  actividadId: z.string().optional().nullable(),
+  tareaId: z.string().optional().nullable(),
+  subtareaId: z.string().optional().nullable(),
   fechaInicio: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   fechaFin: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   horaInicio: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).optional(),
@@ -24,6 +30,35 @@ const asignacionSchema = z.object({
   prioridad: z.number().int().min(0).default(0),
   notas: z.string().optional(),
 });
+
+// Verifica que los vínculos WBS pertenezcan al mismo proyecto
+async function validarWbsLinks(
+  proyectoId: string,
+  links: { actividadId?: string | null; tareaId?: string | null; subtareaId?: string | null }
+): Promise<string | null> {
+  if (links.actividadId) {
+    const act = await prisma.actividad.findUnique({
+      where: { id: links.actividadId },
+      select: { proyectoId: true },
+    });
+    if (!act || act.proyectoId !== proyectoId) return 'La actividad vinculada no pertenece al proyecto';
+  }
+  if (links.tareaId) {
+    const tar = await prisma.tarea.findUnique({
+      where: { id: links.tareaId },
+      select: { actividad: { select: { proyectoId: true } } },
+    });
+    if (!tar || tar.actividad.proyectoId !== proyectoId) return 'La tarea vinculada no pertenece al proyecto';
+  }
+  if (links.subtareaId) {
+    const sub = await prisma.subtarea.findUnique({
+      where: { id: links.subtareaId },
+      select: { tarea: { select: { actividad: { select: { proyectoId: true } } } } },
+    });
+    if (!sub || sub.tarea.actividad.proyectoId !== proyectoId) return 'La subtarea vinculada no pertenece al proyecto';
+  }
+  return null;
+}
 
 const moverSchema = z.object({
   fechaInicio: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
@@ -102,6 +137,11 @@ asignacionesRoutes.post('/', async (c) => {
 
   const body = await c.req.json();
   const validated = asignacionSchema.parse(body);
+
+  const errWbs = await validarWbsLinks(validated.proyectoId, validated);
+  if (errWbs) {
+    return c.json({ error: errWbs }, 400);
+  }
 
   const conflicto = await validarConflictoInterno(
     validated.recursoId,
@@ -194,6 +234,11 @@ asignacionesRoutes.put('/:id', async (c) => {
       yourVersion: version,
       code: 'OPTIMISTIC_LOCK_CONFLICT',
     }, 409);
+  }
+
+  const errWbs = await validarWbsLinks(validated.proyectoId ?? actual.proyectoId, validated);
+  if (errWbs) {
+    return c.json({ error: errWbs }, 400);
   }
 
   const asignacion = await prisma.asignacion.update({

@@ -68,9 +68,10 @@ planningRoutes.get('/grid', async (c) => {
     // Scope por rol: ADMIN_DEPTO solo ve recursos de su departamento (decisión b)
     const scopeDeptId = await resolveDepartmentScope(c);
     if (scopeDeptId) whereRecurso.departamentoId = scopeDeptId;
-    if (params.departamentoId) whereRecurso.departamentoId = params.departamentoId;
-    if (params.equipoId) whereRecurso.equipoId = params.equipoId;
-    if (params.recursoId) whereRecurso.id = params.recursoId;
+    // Filtros multi-selección: los ids llegan separados por comas ("id1,id2")
+    if (params.departamentoId) whereRecurso.departamentoId = { in: params.departamentoId.split(',') };
+    if (params.equipoId) whereRecurso.equipoId = { in: params.equipoId.split(',') };
+    if (params.recursoId) whereRecurso.id = { in: params.recursoId.split(',') };
     if (query.areaId) whereRecurso.areaId = query.areaId;
 
     const recursos = await prisma.recurso.findMany({
@@ -93,8 +94,8 @@ planningRoutes.get('/grid', async (c) => {
       fechaFin: { gte: fechaInicio },
       estado: { not: 'CANCELADA' },
     };
-    if (query.proyectoId) whereAsignacion.proyectoId = query.proyectoId;
-    if (query.tipoActividadId) whereAsignacion.tipoActividadId = query.tipoActividadId;
+    if (query.proyectoId) whereAsignacion.proyectoId = { in: query.proyectoId.split(',') };
+    if (query.tipoActividadId) whereAsignacion.tipoActividadId = { in: query.tipoActividadId.split(',') };
     if (query.estado) whereAsignacion.estado = query.estado;
 
     if (query.clienteId) {
@@ -179,6 +180,10 @@ planningRoutes.get('/grid', async (c) => {
       proyectoColor: a.proyecto.color ?? undefined,
       tipoActividadNombre: a.tipoActividad.nombre,
       tipoActividadColor: a.tipoActividad.color,
+      nombre: a.nombre ?? undefined,
+      actividadId: a.actividadId ?? undefined,
+      tareaId: a.tareaId ?? undefined,
+      subtareaId: a.subtareaId ?? undefined,
       fechaInicio: a.fechaInicio.toISOString().split('T')[0],
       fechaFin: a.fechaFin.toISOString().split('T')[0],
       horaInicio: a.horaInicio ?? undefined,
@@ -334,6 +339,7 @@ planningRoutes.get('/gantt', async (c) => {
           include: {
             recurso: { select: { nombre: true, apellido: true } },
             tipoActividad: { select: { nombre: true, color: true } },
+            subtarea: { select: { tareaId: true } },
           },
           orderBy: { fechaInicio: 'asc' },
         },
@@ -423,21 +429,23 @@ planningRoutes.get('/gantt', async (c) => {
         esCritica: false,
       });
 
-      // Filas hijas: una por asignación
+      // Filas hijas: una por asignación (colgada de su nodo WBS vinculado)
       asignaciones.forEach((a) => {
         const visInicio = a.fechaInicio < fechaInicio ? fechaInicio : a.fechaInicio;
         const visFin = a.fechaFin > fechaFin ? fechaFin : a.fechaFin;
+        // Nodo padre efectivo: tarea > tarea de la subtarea > actividad > proyecto
+        const parentId = a.tareaId ?? a.subtarea?.tareaId ?? a.actividadId ?? p.id;
         assignmentTasks.push({
           id: `asig-${a.id}`,
           tipo: 'ASIGNACION',
           proyectoId: p.id,
-          nombre: `${a.tipoActividad.nombre}`,
+          nombre: a.nombre ?? a.tipoActividad.nombre,
           fechaInicio: toISODate(visInicio),
           fechaFin: toISODate(visFin),
           percentComplete:
             a.estado === 'COMPLETADA' ? 100 : a.estado === 'EN_CURSO' ? 50 : 0,
           color: a.tipoActividad.color,
-          parentId: p.id,
+          parentId,
           dependencies: [],
           recursos: a.recurso.apellido
             ? `${a.recurso.nombre} ${a.recurso.apellido}`
@@ -575,14 +583,24 @@ planningRoutes.get('/gantt', async (c) => {
       if (!task || (ordered as GanttTaskItem[]).includes(task)) return;
       ordered.push(task);
 
-      // Jerarquía WBS: actividades con sus tareas
+      // Jerarquía WBS: actividades → tareas (con sus asignaciones vinculadas)
       (actividadesPorProyecto.get(id) ?? []).forEach((a) => {
         const actTask = actTaskById.get(a.id);
         if (actTask) ordered.push(actTask);
-        (wbsTareasPorActividad.get(a.id) ?? []).forEach((t) => ordered.push(t));
+        (wbsTareasPorActividad.get(a.id) ?? []).forEach((t) => {
+          ordered.push(t);
+          // Asignaciones vinculadas a esta tarea (o a subtareas de ella)
+          assignmentTasks
+            .filter((as) => as.parentId === t.id)
+            .forEach((as) => ordered.push(as));
+        });
+        // Asignaciones vinculadas directo a la actividad
+        assignmentTasks
+          .filter((as) => as.parentId === a.id)
+          .forEach((as) => ordered.push(as));
       });
 
-      // Asignaciones del proyecto
+      // Asignaciones a nivel de proyecto (sin vínculo WBS)
       assignmentTasks
         .filter((a) => a.parentId === id)
         .forEach((a) => ordered.push(a));

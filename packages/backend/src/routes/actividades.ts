@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import { prisma } from '../lib/db.js';
 import { getUser } from '../types/index.js';
-import type { ProyectoWBSResponse, Actividad, Tarea, Subtarea, TareaAsignado } from '@operaciones-planner/shared';
+import type { ProyectoWBSResponse, Actividad, Tarea, Subtarea, TareaAsignado, AsignacionResumen } from '@operaciones-planner/shared';
 
 const actividadesRoutes = new Hono();
 
@@ -161,21 +161,77 @@ actividadesRoutes.get('/proyecto/:proyectoId', async (c) => {
   });
   if (!proyecto) return c.json({ error: 'Proyecto no encontrado' }, 404);
 
-  const actividades = await prisma.actividad.findMany({
-    where: { proyectoId },
-    include: {
-      tareas: {
-        include: {
-          subtareas: { orderBy: { orden: 'asc' } },
-          asignados: {
-            include: { recurso: { select: { id: true, nombre: true, apellido: true } } },
+  const [actividades, asignacionesRaw] = await Promise.all([
+    prisma.actividad.findMany({
+      where: { proyectoId },
+      include: {
+        tareas: {
+          include: {
+            subtareas: { orderBy: { orden: 'asc' } },
+            asignados: {
+              include: { recurso: { select: { id: true, nombre: true, apellido: true } } },
+            },
           },
+          orderBy: { orden: 'asc' },
         },
-        orderBy: { orden: 'asc' },
       },
-    },
-    orderBy: { orden: 'asc' },
+      orderBy: { orden: 'asc' },
+    }),
+    // Asignaciones de planificación del proyecto (se muestran en el árbol WBS
+    // según su vínculo: actividad / tarea / subtarea / nivel proyecto)
+    prisma.asignacion.findMany({
+      where: { proyectoId, estado: { not: 'CANCELADA' } },
+      include: {
+        recurso: { select: { nombre: true, apellido: true } },
+        tipoActividad: { select: { nombre: true } },
+      },
+      orderBy: { fechaInicio: 'asc' },
+    }),
+  ]);
+
+  const toResumen = (a: (typeof asignacionesRaw)[number]): AsignacionResumen => ({
+    id: a.id,
+    nombre: a.nombre ?? undefined,
+    recursoId: a.recursoId,
+    recursoNombre: a.recurso.apellido
+      ? `${a.recurso.nombre} ${a.recurso.apellido}`
+      : a.recurso.nombre,
+    tipoActividadNombre: a.tipoActividad.nombre,
+    fechaInicio: a.fechaInicio,
+    fechaFin: a.fechaFin,
+    estado: a.estado as AsignacionResumen['estado'],
   });
+
+  const porActividad = new Map<string, ReturnType<typeof toResumen>[]>();
+  const porTarea = new Map<string, ReturnType<typeof toResumen>[]>();
+  const porSubtarea = new Map<string, ReturnType<typeof toResumen>[]>();
+  const aNivelProyecto: ReturnType<typeof toResumen>[] = [];
+
+  for (const a of asignacionesRaw) {
+    const r = toResumen(a);
+    if (a.subtareaId) {
+      porSubtarea.set(a.subtareaId, [...(porSubtarea.get(a.subtareaId) ?? []), r]);
+    } else if (a.tareaId) {
+      porTarea.set(a.tareaId, [...(porTarea.get(a.tareaId) ?? []), r]);
+    } else if (a.actividadId) {
+      porActividad.set(a.actividadId, [...(porActividad.get(a.actividadId) ?? []), r]);
+    } else {
+      aNivelProyecto.push(r);
+    }
+  }
+
+  const actividadesOut = actividades.map((a) => ({
+    ...a,
+    asignaciones: porActividad.get(a.id) ?? [],
+    tareas: a.tareas.map((t) => ({
+      ...t,
+      asignaciones: porTarea.get(t.id) ?? [],
+      subtareas: t.subtareas.map((s) => ({
+        ...s,
+        asignaciones: porSubtarea.get(s.id) ?? [],
+      })),
+    })),
+  }));
 
   const totalTareas = actividades.reduce((acc, a) => acc + a.tareas.length, 0);
   const totalSubtareas = actividades.reduce(
@@ -189,11 +245,13 @@ actividadesRoutes.get('/proyecto/:proyectoId', async (c) => {
       estado: proyecto.estado as ProyectoWBSResponse['proyecto']['estado'],
       percentComplete: proyecto.percentComplete ?? 0,
     },
-    actividades: actividades as unknown as Actividad[],
+    actividades: actividadesOut as unknown as Actividad[],
+    asignaciones: aNivelProyecto,
     metadata: {
       totalActividades: actividades.length,
       totalTareas,
       totalSubtareas,
+      totalAsignaciones: asignacionesRaw.length,
     },
   };
 

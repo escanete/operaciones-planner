@@ -225,6 +225,19 @@ model Asignacion {
   recurso       Recurso        @relation(fields: [recursoId], references: [id], onDelete: Cascade)
   tipoActividadId String
   tipoActividad TipoActividad  @relation(fields: [tipoActividadId], references: [id], onDelete: Cascade)
+
+  // Nombre de la actividad (texto libre: qué hace específicamente la persona)
+  nombre        String?
+
+  // Vinculación WBS opcional: la asignación puede colgar de una actividad,
+  // tarea o subtarea del proyecto (SetNull: si se borra el nodo, la
+  // asignación sobrevive a nivel de proyecto)
+  actividadId   String?
+  actividad     Actividad?     @relation(fields: [actividadId], references: [id], onDelete: SetNull)
+  tareaId       String?
+  tarea         Tarea?         @relation(fields: [tareaId], references: [id], onDelete: SetNull)
+  subtareaId    String?
+  subtarea      Subtarea?      @relation(fields: [subtareaId], references: [id], onDelete: SetNull)
   
   // Temporal
   fechaInicio   DateTime
@@ -281,6 +294,7 @@ model Actividad {
   updatedAt    DateTime @updatedAt
 
   tareas Tarea[]
+  asignaciones Asignacion[]
 
   @@index([proyectoId])
   @@map("actividades")
@@ -303,6 +317,7 @@ model Tarea {
 
   subtareas Subtarea[]
   asignados TareaAsignado[]
+  asignaciones Asignacion[]
 
   @@index([actividadId])
   @@map("tareas")
@@ -316,6 +331,7 @@ model Subtarea {
   descripcion String?
   orden    Int    @default(0)
   completada Boolean @default(false)
+  asignaciones Asignacion[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

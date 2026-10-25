@@ -22,7 +22,7 @@ import {
 } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { AlertCircle, Calendar, Loader2, MapPin, Truck, Users } from 'lucide-react';
-import { useProyectos, useRecursos, useTiposActividad, useDepartamentos } from '@/hooks/useApi';
+import { useProyectos, useRecursos, useTiposActividad, useDepartamentos, useProyectoWBS } from '@/hooks/useApi';
 import { api, ApiError } from '@/services/api';
 import { cn } from '@/lib/utils';
 import { getRoleLevelLabel } from '@operaciones-planner/shared';
@@ -50,6 +50,11 @@ export function AssignmentFormDialog({
   const [proyectoId, setProyectoId] = useState('');
   const [tipoActividadId, setTipoActividadId] = useState('');
   const [recursoIds, setRecursoIds] = useState<string[]>([]);
+  const [nombre, setNombre] = useState('');
+  // Vínculo WBS opcional (conecta la asignación con el árbol del proyecto)
+  const [wbsActividadId, setWbsActividadId] = useState<string>('');
+  const [wbsTareaId, setWbsTareaId] = useState<string>('');
+  const [wbsSubtareaId, setWbsSubtareaId] = useState<string>('');
   const [fechaInicio, setFechaInicio] = useState('');
   const [fechaFin, setFechaFin] = useState('');
   const [todoDia, setTodoDia] = useState(true);
@@ -78,6 +83,19 @@ export function AssignmentFormDialog({
   const { data: recursos } = useRecursos({ activo: true, tipo: 'PERSONA' });
   const { data: camionetas } = useRecursos({ activo: true, tipo: 'VEHICULO' });
   const { data: departamentos } = useDepartamentos();
+  // Árbol WBS del proyecto seleccionado (para vincular la asignación)
+  const { data: wbs } = useProyectoWBS(proyectoId || '__none__');
+
+  // Nodos WBS disponibles según la selección en cascada
+  const wbsActividades = wbs?.actividades ?? [];
+  const wbsTareas = useMemo(
+    () => wbsActividades.find((a) => a.id === wbsActividadId)?.tareas ?? [],
+    [wbsActividades, wbsActividadId]
+  );
+  const wbsSubtareas = useMemo(
+    () => wbsTareas.find((t) => t.id === wbsTareaId)?.subtareas ?? [],
+    [wbsTareas, wbsTareaId]
+  );
 
   // Áreas disponibles derivadas de los recursos (decisión b)
   const areasDisponibles = useMemo(() => {
@@ -118,6 +136,10 @@ export function AssignmentFormDialog({
         setProyectoId(asignacion.proyectoId);
         setTipoActividadId(asignacion.tipoActividadId);
         setRecursoIds([asignacion.recursoId]);
+        setNombre(asignacion.nombre ?? '');
+        setWbsActividadId(asignacion.actividadId ?? '');
+        setWbsTareaId(asignacion.tareaId ?? '');
+        setWbsSubtareaId(asignacion.subtareaId ?? '');
         setFechaInicio(asignacion.fechaInicio.toString().split('T')[0]);
         setFechaFin(asignacion.fechaFin.toString().split('T')[0]);
         setTodoDia(asignacion.todoDia);
@@ -134,6 +156,10 @@ export function AssignmentFormDialog({
         setProyectoId(proyectosDisponibles?.[0]?.id ?? '');
         setTipoActividadId(tiposActividad?.[0]?.id ?? '');
         setRecursoIds(defaultRecursoId ? [defaultRecursoId] : []);
+        setNombre('');
+        setWbsActividadId('');
+        setWbsTareaId('');
+        setWbsSubtareaId('');
         setFechaInicio(defaultDate ?? new Date().toISOString().split('T')[0]);
         setFechaFin(defaultDate ?? new Date().toISOString().split('T')[0]);
         setTodoDia(true);
@@ -177,6 +203,10 @@ export function AssignmentFormDialog({
       const payload: Record<string, unknown> = {
         proyectoId,
         tipoActividadId,
+        nombre: nombre || undefined,
+        actividadId: wbsActividadId || undefined,
+        tareaId: wbsTareaId || undefined,
+        subtareaId: wbsSubtareaId || undefined,
         fechaInicio,
         fechaFin,
         todoDia,
@@ -216,6 +246,7 @@ export function AssignmentFormDialog({
       await queryClient.invalidateQueries({ queryKey: ['planning-grid'] });
       await queryClient.invalidateQueries({ queryKey: ['asignaciones'] });
       await queryClient.invalidateQueries({ queryKey: ['project-gantt'] });
+      await queryClient.invalidateQueries({ queryKey: ['proyecto-wbs'] });
       await queryClient.invalidateQueries({ queryKey: ['proyectos'] });
 
       onOpenChange(false);
@@ -223,7 +254,7 @@ export function AssignmentFormDialog({
       if (err instanceof ApiError && err.status === 409) {
         const data = err.data as { conflictos?: ConflictInfo[] };
         setConflictos(data.conflictos ?? []);
-        setError('Se detectaron conflictos de asignación');
+        setError('Se detectaron conflictos de actividad (mismo recurso en fechas que se solapan)');
       } else {
         setError(err instanceof Error ? err.message : 'Error al guardar');
       }
@@ -240,11 +271,11 @@ export function AssignmentFormDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Calendar className="h-5 w-5" />
-            {isEditing ? 'Editar Asignación' : 'Nueva Asignación'}
+            {isEditing ? 'Editar Actividad' : 'Nueva Actividad'}
           </DialogTitle>
           <DialogDescription>
             {isEditing
-              ? 'Modifica los datos de la asignación existente'
+              ? 'Modifica los datos de la actividad existente'
               : 'Asigna uno o más participantes a un proyecto en un rango de fechas'}
           </DialogDescription>
         </DialogHeader>
@@ -256,7 +287,15 @@ export function AssignmentFormDialog({
               <Label htmlFor="proyecto">
                 Proyecto <span className="text-destructive">*</span>
               </Label>
-              <Select value={proyectoId} onValueChange={setProyectoId}>
+              <Select
+                value={proyectoId}
+                onValueChange={(v) => {
+                  setProyectoId(v);
+                  setWbsActividadId('');
+                  setWbsTareaId('');
+                  setWbsSubtareaId('');
+                }}
+              >
                 <SelectTrigger id="proyecto">
                   <SelectValue placeholder="Seleccionar proyecto" />
                 </SelectTrigger>
@@ -303,6 +342,93 @@ export function AssignmentFormDialog({
               </Select>
             </div>
           </div>
+
+          {/* Nombre de la actividad (qué hace específicamente la persona) */}
+          <div className="space-y-2">
+            <Label htmlFor="nombre-actividad">Nombre de la actividad</Label>
+            <Input
+              id="nombre-actividad"
+              placeholder="Ej: Mantenimiento SCADA — Planta Norte"
+              value={nombre}
+              onChange={(e) => setNombre(e.target.value)}
+              maxLength={200}
+            />
+            <p className="text-xs text-muted-foreground">
+              Describe qué se hará específicamente. Se muestra en el calendario, el Gantt y el árbol
+              del proyecto. Si se deja vacío se usa el tipo de actividad.
+            </p>
+          </div>
+
+          {/* Vinculación WBS: conectar la asignación con el árbol del proyecto */}
+          {wbsActividades.length > 0 && (
+            <div className="space-y-2 rounded-md border p-3">
+              <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Vincular al árbol del proyecto (opcional)
+              </Label>
+              <div className="grid grid-cols-3 gap-2">
+                <Select
+                  value={wbsActividadId || '__none__'}
+                  onValueChange={(v) => {
+                    setWbsActividadId(v === '__none__' ? '' : v);
+                    setWbsTareaId('');
+                    setWbsSubtareaId('');
+                  }}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Actividad" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">— Sin actividad —</SelectItem>
+                    {wbsActividades.map((a) => (
+                      <SelectItem key={a.id} value={a.id}>
+                        {a.nombre}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Select
+                  value={wbsTareaId || '__none__'}
+                  disabled={wbsTareas.length === 0}
+                  onValueChange={(v) => {
+                    setWbsTareaId(v === '__none__' ? '' : v);
+                    setWbsSubtareaId('');
+                  }}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Tarea" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">— Sin tarea —</SelectItem>
+                    {wbsTareas.map((t) => (
+                      <SelectItem key={t.id} value={t.id}>
+                        {t.nombre}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Select
+                  value={wbsSubtareaId || '__none__'}
+                  disabled={wbsSubtareas.length === 0}
+                  onValueChange={(v) => setWbsSubtareaId(v === '__none__' ? '' : v)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Subtarea" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">— Sin subtarea —</SelectItem>
+                    {wbsSubtareas.map((s) => (
+                      <SelectItem key={s.id} value={s.id}>
+                        {s.nombre}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                La actividad aparecerá en el árbol del proyecto bajo el elemento seleccionado.
+              </p>
+            </div>
+          )}
 
           {/* Participantes (multi-select) con filtros por depto/área (decisiones b y e) */}
           <div className="space-y-2">
@@ -596,7 +722,7 @@ export function AssignmentFormDialog({
           )}
           <Button onClick={() => handleSubmit(false)} disabled={isSubmitting}>
             {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            {isEditing ? 'Guardar Cambios' : 'Crear Asignación'}
+            {isEditing ? 'Guardar Cambios' : 'Crear Actividad'}
           </Button>
         </DialogFooter>
       </DialogContent>

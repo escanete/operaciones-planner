@@ -178,7 +178,14 @@ export interface Asignacion {
   recurso?: Recurso;
   tipoActividadId: string;
   tipoActividad?: TipoActividad;
-  
+
+  // Nombre de la actividad (texto libre: qué hace específicamente la persona)
+  nombre?: string;
+  // Vinculación WBS opcional (actividad, tarea o subtarea del proyecto)
+  actividadId?: string;
+  tareaId?: string;
+  subtareaId?: string;
+
   fechaInicio: Date;
   fechaFin: Date;
   horaInicio?: string;
@@ -334,6 +341,11 @@ export interface AsignacionGridItem {
   proyectoColor?: string;
   tipoActividadNombre: string;
   tipoActividadColor: string;
+  nombre?: string; // nombre de la actividad (qué hace específicamente)
+  // vínculo WBS opcional
+  actividadId?: string;
+  tareaId?: string;
+  subtareaId?: string;
   fechaInicio: string; // ISO
   fechaFin: string;
   horaInicio?: string;
@@ -365,6 +377,7 @@ export interface Subtarea {
   descripcion?: string;
   orden: number;
   completada: boolean; // checkbox 0/100
+  asignaciones?: AsignacionResumen[];
   createdAt: Date;
   updatedAt: Date;
 }
@@ -374,6 +387,18 @@ export interface TareaAsignado {
   recursoId: string;
   nombre: string;
   apellido?: string;
+}
+
+// Asignación de planificación resumida (dentro del árbol WBS del proyecto)
+export interface AsignacionResumen {
+  id: string;
+  nombre?: string; // qué hace específicamente (texto libre)
+  recursoId: string;
+  recursoNombre: string; // "Nombre Apellido" o código
+  tipoActividadNombre: string;
+  fechaInicio: Date;
+  fechaFin: Date;
+  estado: AsignacionEstado;
 }
 
 export interface Tarea {
@@ -388,6 +413,7 @@ export interface Tarea {
   percentComplete: number; // roll-up de subtareas o 0/100
   subtareas?: Subtarea[];
   asignados?: TareaAsignado[];
+  asignaciones?: AsignacionResumen[];
   createdAt: Date;
   updatedAt: Date;
 }
@@ -402,6 +428,7 @@ export interface Actividad {
   fechaFin?: Date;
   percentComplete: number; // promedio automático de tareas
   tareas?: Tarea[];
+  asignaciones?: AsignacionResumen[];
   createdAt: Date;
   updatedAt: Date;
 }
@@ -414,10 +441,13 @@ export interface ProyectoWBSResponse {
     percentComplete: number;
   };
   actividades: Actividad[];
+  // Asignaciones de planificación sin vínculo WBS (cuelgan directo del proyecto)
+  asignaciones: AsignacionResumen[];
   metadata: {
     totalActividades: number;
     totalTareas: number;
     totalSubtareas: number;
+    totalAsignaciones: number;
   };
 }
 

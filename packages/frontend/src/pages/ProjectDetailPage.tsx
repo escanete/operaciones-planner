@@ -1,10 +1,11 @@
-import { useState } from 'react';
+import { Fragment, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { format, parseISO } from 'date-fns';
 import {
   ArrowLeft,
   CalendarDays,
+  CalendarClock,
   ChevronDown,
   ChevronRight,
   FileDown,
@@ -43,7 +44,7 @@ import {
   useDeleteSubtarea,
 } from '@/hooks/useApi';
 import { cn } from '@/lib/utils';
-import type { Actividad, Subtarea, Tarea } from '@operaciones-planner/shared';
+import type { Actividad, Subtarea, Tarea, AsignacionResumen } from '@operaciones-planner/shared';
 
 // ============================================
 // PERMISOS (definición de roles acordada)
@@ -150,6 +151,8 @@ export function ProjectDetailPage() {
                 <span className="hidden text-xs text-muted-foreground sm:inline">
                   {data.metadata.totalActividades} actividades · {data.metadata.totalTareas} tareas ·{' '}
                   {data.metadata.totalSubtareas} subtareas
+                  {data.metadata.totalAsignaciones > 0 &&
+                    ` · ${data.metadata.totalAsignaciones} en planificación`}
                 </span>
               )}
             </div>
@@ -191,7 +194,7 @@ export function ProjectDetailPage() {
           <div className="flex h-full items-center justify-center">
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
           </div>
-        ) : (data?.actividades.length ?? 0) === 0 ? (
+        ) : (data?.actividades.length ?? 0) === 0 && (data?.asignaciones.length ?? 0) === 0 ? (
           <Card>
             <CardContent className="flex flex-col items-center gap-3 py-12 text-center">
               <CalendarDays className="h-10 w-10 text-muted-foreground" />
@@ -199,6 +202,7 @@ export function ProjectDetailPage() {
               <p className="max-w-md text-sm text-muted-foreground">
                 Las actividades son los servicios cobrados al cliente. Dentro de cada una se crean
                 tareas y subtareas; al completarlas, el avance del proyecto sube automáticamente.
+                También puedes crear actividades desde la vista de Planificación y vincularlas aquí.
               </p>
               {canWBS && (
                 <Button className="mt-2" onClick={() => setDialog({ tipo: 'actividad', mode: 'create' })}>
@@ -210,6 +214,26 @@ export function ProjectDetailPage() {
           </Card>
         ) : (
           <div className="space-y-2">
+            {/* Actividades de planificación sin vínculo WBS (cuelgan del proyecto) */}
+            {(data?.asignaciones.length ?? 0) > 0 && (
+              <Card className="overflow-hidden">
+                <div className="flex items-center gap-2 bg-muted/40 px-3 py-2.5">
+                  <CalendarClock className="h-4 w-4 shrink-0 text-muted-foreground" />
+                  <p className="min-w-0 flex-1 truncate text-sm font-bold">
+                    Actividades de planificación
+                  </p>
+                  <Badge variant="outline" className="px-1.5 py-0 text-[10px]">
+                    {data!.asignaciones.length}
+                  </Badge>
+                </div>
+                <div className="divide-y">
+                  {data!.asignaciones.map((a) => (
+                    <AsignacionRow key={a.id} a={a} indent="pl-10" />
+                  ))}
+                </div>
+              </Card>
+            )}
+
             {data!.actividades.map((actividad) => (
               <ActividadCard
                 key={actividad.id}
@@ -436,10 +460,8 @@ function ActividadCard({
                 {/* Subtareas */}
                 {!tareaColapsada &&
                   (tarea.subtareas ?? []).map((subtarea) => (
-                    <div
-                      key={subtarea.id}
-                      className="flex items-center gap-2 py-1.5 pl-16 pr-3 hover:bg-accent/30"
-                    >
+                    <Fragment key={subtarea.id}>
+                      <div className="flex items-center gap-2 py-1.5 pl-16 pr-3 hover:bg-accent/30">
                       <Checkbox
                         checked={subtarea.completada}
                         disabled={!puedeEditarSub}
@@ -488,13 +510,29 @@ function ActividadCard({
                           </Button>
                         </div>
                       )}
-                    </div>
+                      </div>
+                      {/* Actividades de planificación vinculadas a esta subtarea */}
+                      {(subtarea.asignaciones ?? []).map((a) => (
+                        <AsignacionRow key={a.id} a={a} indent="pl-24" />
+                      ))}
+                    </Fragment>
+                  ))}
+
+                {/* Actividades de planificación vinculadas a esta tarea */}
+                {!tareaColapsada &&
+                  (tarea.asignaciones ?? []).map((a) => (
+                    <AsignacionRow key={a.id} a={a} indent="pl-16" />
                   ))}
               </div>
             );
           })}
 
-          {(actividad.tareas ?? []).length === 0 && (
+          {/* Actividades de planificación vinculadas directo a la actividad */}
+          {(actividad.asignaciones ?? []).map((a) => (
+            <AsignacionRow key={a.id} a={a} indent="pl-10" />
+          ))}
+
+          {(actividad.tareas ?? []).length === 0 && (actividad.asignaciones ?? []).length === 0 && (
             <p className="px-10 py-2 text-xs text-muted-foreground">
               Sin tareas todavía{canWBS ? ' — usa «+ Tarea» para agregar la primera' : ''}
             </p>
@@ -508,6 +546,38 @@ function ActividadCard({
 // ============================================
 // Utilidades visuales
 // ============================================
+
+// Fila de actividad de planificación dentro del árbol WBS
+function AsignacionRow({ a, indent = 'pl-10' }: { a: AsignacionResumen; indent?: string }) {
+  const inicio = new Date(a.fechaInicio).toLocaleDateString('es-CL', {
+    day: '2-digit',
+    month: '2-digit',
+  });
+  const fin = new Date(a.fechaFin).toLocaleDateString('es-CL', { day: '2-digit', month: '2-digit' });
+  return (
+    <div
+      className={cn('flex items-center gap-2 py-1.5 pr-3 text-xs hover:bg-accent/30', indent)}
+      title={`${a.nombre ?? a.tipoActividadNombre} — ${a.recursoNombre}\n${inicio} → ${fin} · ${a.estado}`}
+    >
+      <CalendarClock className="h-3 w-3 shrink-0 text-muted-foreground" />
+      <span className="min-w-0 flex-1 truncate font-medium">
+        {a.nombre ?? a.tipoActividadNombre}
+      </span>
+      <Badge variant="outline" className="shrink-0 px-1.5 py-0 text-[10px]">
+        {a.recursoNombre}
+      </Badge>
+      <span className="hidden shrink-0 text-[10px] text-muted-foreground sm:inline">
+        {inicio} → {fin}
+      </span>
+      <Badge
+        variant={a.estado === 'COMPLETADA' ? 'default' : 'secondary'}
+        className="shrink-0 px-1.5 py-0 text-[10px]"
+      >
+        {a.estado}
+      </Badge>
+    </div>
+  );
+}
 
 function MiniProgress({ percent }: { percent: number }) {
   return (

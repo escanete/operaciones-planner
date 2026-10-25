@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useState, type MouseEvent as ReactMouseEvent } from 'react';
+import { Fragment, useEffect, useMemo, useState, type MouseEvent as ReactMouseEvent } from 'react';
 import { format, addDays, isSameDay, isWeekend, parseISO, differenceInCalendarDays } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { AlertTriangle, ChevronDown, ChevronRight, ChevronsDownUp, ChevronsUpDown, Plus } from 'lucide-react';
@@ -8,7 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { usePlanningStore } from '@/stores/planningStore';
 import type { AsignacionGridItem, RecursoGridItem, GanttTaskItem } from '@operaciones-planner/shared';
 
-// ConfiguraciÃ³n de tamaÃ±o de celda segÃºn escala temporal
+// Configuración de tamaño de celda según escala temporal
 const CELL_WIDTHS: Record<string, number> = {
   day: 200,
   week: 64,
@@ -41,11 +41,11 @@ interface GridProps {
 interface AssignmentLayout {
   asignacion: AsignacionGridItem;
   lane: number;              // carril vertical
-  startOffset: number;       // dÃ­as desde fechaInicio del grid
-  spanDias: number;          // dÃ­as visibles
+  startOffset: number;       // días desde fechaInicio del grid
+  spanDias: number;          // días visibles
   clippedLeft: boolean;      // viene de antes del rango
-  clippedRight: boolean;     // sigue despuÃ©s del rango
-  tieneConflicto: boolean;   // se topa con otra asignaciÃ³n
+  clippedRight: boolean;     // sigue después del rango
+  tieneConflicto: boolean;   // se topa con otra asignación
 }
 
 export function VirtualizedTimeGrid({
@@ -59,10 +59,21 @@ export function VirtualizedTimeGrid({
 }: GridProps) {
   const { timeScale, draggingAssignmentId, setDraggingAssignment } = usePlanningStore();
   const [hoverCell, setHoverCell] = useState<string | null>(null);
+  // Recursos expandidos: clic en el nombre despliega sus actividades como sub-filas
+  const [expandedRecursos, setExpandedRecursos] = useState<Set<string>>(new Set());
   const cellWidth = CELL_WIDTHS[timeScale] ?? 48;
   const leftColWidth = 220;
 
-  /** Suelta una asignaciÃ³n en la celda (dÃ­a, recurso): recalcula fechas conservando duraciÃ³n */
+  const toggleExpandRecurso = (recursoId: string) => {
+    setExpandedRecursos((prev) => {
+      const next = new Set(prev);
+      if (next.has(recursoId)) next.delete(recursoId);
+      else next.add(recursoId);
+      return next;
+    });
+  };
+
+  /** Suelta una asignación en la celda (día, recurso): recalcula fechas conservando duración */
   const handleDrop = (e: React.DragEvent, recursoId: string, dia: Date) => {
     e.preventDefault();
     setHoverCell(null);
@@ -96,7 +107,7 @@ export function VirtualizedTimeGrid({
     });
   };
 
-  /** Inicio de arrastre: guarda id, offset de dÃ­as del agarre y marca visual */
+  /** Inicio de arrastre: guarda id, offset de días del agarre y marca visual */
   const handleAssignmentDragStart = (e: React.DragEvent, layout: AssignmentLayout) => {
     e.dataTransfer.setData('text/plain', layout.asignacion.id);
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
@@ -106,7 +117,7 @@ export function VirtualizedTimeGrid({
     setDraggingAssignment(layout.asignacion.id);
   };
 
-  // Generar los dÃ­as visibles
+  // Generar los días visibles
   const dias = useMemo(() => {
     const days: Date[] = [];
     let current = new Date(fechaInicio);
@@ -153,7 +164,7 @@ export function VirtualizedTimeGrid({
     return grouped;
   }, [recursos]);
 
-  // Calcular layout de cada asignaciÃ³n por recurso (lanes + conflictos + clipping)
+  // Calcular layout de cada asignación por recurso (lanes + conflictos + clipping)
   const layoutPorRecurso = useMemo(() => {
     const map = new Map<string, { layouts: AssignmentLayout[]; lanes: number; tieneConflicto: boolean }>();
 
@@ -165,7 +176,7 @@ export function VirtualizedTimeGrid({
     });
 
     porRecurso.forEach((asigs, recursoId) => {
-      // Clonar y ordenar por fecha de inicio, luego por duraciÃ³n (mÃ¡s largas primero)
+      // Clonar y ordenar por fecha de inicio, luego por duración (más largas primero)
       const sorted = [...asigs].sort((a, b) => {
         const diffA = differenceInCalendarDays(parseISO(a.fechaInicio), fechaInicio);
         const diffB = differenceInCalendarDays(parseISO(b.fechaInicio), fechaInicio);
@@ -205,7 +216,7 @@ export function VirtualizedTimeGrid({
           laneEnds.push(aFin);
         }
 
-        // Detectar conflicto: se topa con otra asignaciÃ³n en el mismo recurso
+        // Detectar conflicto: se topa con otra asignación en el mismo recurso
         const conflicto = sorted.some((other) => {
           if (other.id === a.id) return false;
           const oInicio = parseISO(other.fechaInicio);
@@ -245,7 +256,7 @@ export function VirtualizedTimeGrid({
   const headerHeight = 46;
 
   return (
-    // Contenedor Ãºnico con scroll horizontal y vertical
+    // Contenedor único con scroll horizontal y vertical
     <div className="relative h-full w-full overflow-auto grid-scrollbar bg-card">
       <div style={{ width: leftColWidth + gridWidth, minWidth: '100%' }}>
         {/* ===== Header de fechas (sticky top) ===== */}
@@ -261,7 +272,7 @@ export function VirtualizedTimeGrid({
             <span className="text-sm font-semibold">Recurso</span>
           </div>
 
-          {/* DÃ­as */}
+          {/* Días */}
           <div className="flex flex-shrink-0" style={{ width: gridWidth }}>
             {dias.map((dia) => (
               <div
@@ -319,55 +330,83 @@ export function VirtualizedTimeGrid({
             );
           }
 
-          // Fila de recurso
+          // Fila de recurso (+ sub-filas de actividades si está expandido)
           const recurso = fila.recurso!;
           const info = layoutPorRecurso.get(recurso.id);
           const height = rowHeight(recurso.id);
+          const expandido = expandedRecursos.has(recurso.id);
 
           return (
-            <div key={fila.id} className="flex border-b" style={{ height }}>
-              {/* Columna fija - info recurso (sticky left, sobre las asignaciones) */}
-              <div
-                className="sticky left-0 z-20 flex flex-shrink-0 items-center gap-2 border-r bg-card px-3 shadow-[4px_0_6px_-4px_rgba(0,0,0,0.15)]"
-                style={{ width: leftColWidth, height }}
-              >
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-1.5">
-                    <div
-                      className="h-2 w-2 shrink-0 rounded-full"
-                      style={{ backgroundColor: recurso.colorCalendario ?? '#94a3b8' }}
-                    />
-                    <span className="truncate text-sm font-medium leading-tight">
-                      {recurso.nombre} {recurso.apellido}
-                    </span>
-                    {info?.tieneConflicto && (
-                      <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-destructive" />
-                    )}
-                  </div>
-                  <div className="truncate text-xs leading-tight text-muted-foreground">
-                    {recurso.cargoNombre ?? recurso.equipoNombre ?? ''}
-                  </div>
-                </div>
-                <Badge
-                  variant={
-                    recurso.disponibilidad.alerta === 'NORMAL'
-                      ? 'default'
-                      : recurso.disponibilidad.alerta === 'ALERTA_80'
-                      ? 'secondary'
-                      : recurso.disponibilidad.alerta === 'SIN_ASIGNAR'
-                      ? 'outline'
-                      : 'destructive'
-                  }
-                  className="shrink-0 px-1.5 py-0 text-[10px]"
+            <Fragment key={fila.id}>
+              <div className="flex border-b" style={{ height }}>
+                {/* Columna fija - info recurso (sticky left, sobre las asignaciones) */}
+                <div
+                  className="sticky left-0 z-20 flex flex-shrink-0 items-center gap-2 border-r bg-card px-3 shadow-[4px_0_6px_-4px_rgba(0,0,0,0.15)]"
+                  style={{ width: leftColWidth, height }}
                 >
-                  {recurso.disponibilidad.alerta === 'SIN_ASIGNAR'
-                    ? 'Libre'
-                    : `${recurso.disponibilidad.porcentajeOcupacion}%`}
-                </Badge>
-              </div>
+                  {(info?.layouts.length ?? 0) > 0 && (
+                    <button
+                      className="shrink-0 rounded p-0.5 hover:bg-accent"
+                      onClick={() => toggleExpandRecurso(recurso.id)}
+                      title={expandido ? 'Ocultar actividades' : 'Ver actividades de este recurso'}
+                    >
+                      {expandido ? (
+                        <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+                      ) : (
+                        <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
+                      )}
+                    </button>
+                  )}
+                  <div
+                    className={cn(
+                      'min-w-0 flex-1',
+                      (info?.layouts.length ?? 0) > 0 && 'cursor-pointer hover:opacity-80'
+                    )}
+                    onClick={() => {
+                      if ((info?.layouts.length ?? 0) > 0) toggleExpandRecurso(recurso.id);
+                    }}
+                  >
+                    <div className="flex items-center gap-1.5">
+                      <div
+                        className="h-2 w-2 shrink-0 rounded-full"
+                        style={{ backgroundColor: recurso.colorCalendario ?? '#94a3b8' }}
+                      />
+                      <span className="truncate text-sm font-medium leading-tight">
+                        {recurso.nombre} {recurso.apellido}
+                      </span>
+                      {info?.tieneConflicto && (
+                        <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-destructive" />
+                      )}
+                      {expandido && (info?.layouts.length ?? 0) > 0 && (
+                        <span className="shrink-0 text-[10px] text-muted-foreground">
+                          ({info!.layouts.length})
+                        </span>
+                      )}
+                    </div>
+                    <div className="truncate text-xs leading-tight text-muted-foreground">
+                      {recurso.cargoNombre ?? recurso.equipoNombre ?? ''}
+                    </div>
+                  </div>
+                  <Badge
+                    variant={
+                      recurso.disponibilidad.alerta === 'NORMAL'
+                        ? 'default'
+                        : recurso.disponibilidad.alerta === 'ALERTA_80'
+                        ? 'secondary'
+                        : recurso.disponibilidad.alerta === 'SIN_ASIGNAR'
+                        ? 'outline'
+                        : 'destructive'
+                    }
+                    className="shrink-0 px-1.5 py-0 text-[10px]"
+                  >
+                    {recurso.disponibilidad.alerta === 'SIN_ASIGNAR'
+                      ? 'Libre'
+                      : `${recurso.disponibilidad.porcentajeOcupacion}%`}
+                  </Badge>
+                </div>
 
-              {/* Franja de dÃ­as con asignaciones */}
-              <div className="relative flex-1" style={{ height, width: gridWidth }}>
+                {/* Franja de días con asignaciones */}
+                <div className="relative flex-1" style={{ height, width: gridWidth }}>
                 {/* Celdas de fondo */}
                 <div className="absolute inset-0 flex" style={{ width: gridWidth }}>
                   {dias.map((dia) => {
@@ -427,6 +466,58 @@ export function VirtualizedTimeGrid({
                 ))}
               </div>
             </div>
+
+              {/* Sub-filas: una por actividad del recurso (visible al expandir) */}
+              {expandido &&
+                info?.layouts.map((l) => (
+                  <div
+                    key={`sub-${l.asignacion.id}`}
+                    className="flex border-b border-border/40"
+                    style={{ height: 26 }}
+                  >
+                    {/* Columna fija: nombre de la actividad */}
+                    <div
+                      className="sticky left-0 z-20 flex flex-shrink-0 items-center gap-1.5 border-r bg-muted/30 px-3 pl-9 shadow-[4px_0_6px_-4px_rgba(0,0,0,0.15)]"
+                      style={{ width: leftColWidth, height: 26 }}
+                      title={`${l.asignacion.nombre ?? l.asignacion.tipoActividadNombre} — ${l.asignacion.proyectoNombre}`}
+                    >
+                      <span
+                        className="h-1.5 w-1.5 shrink-0 rounded-sm"
+                        style={{ backgroundColor: l.asignacion.tipoActividadColor }}
+                      />
+                      <span className="truncate text-xs font-medium">
+                        {l.asignacion.nombre ?? l.asignacion.tipoActividadNombre}
+                      </span>
+                      <span className="truncate text-[10px] text-muted-foreground">
+                        · {l.asignacion.proyectoNombre}
+                      </span>
+                    </div>
+                    {/* Barra de la actividad */}
+                    <div className="relative flex-1" style={{ height: 26, width: gridWidth }}>
+                      <div
+                        className="absolute flex cursor-pointer items-center overflow-hidden rounded px-1 hover:brightness-110"
+                        style={{
+                          left: l.startOffset * cellWidth + 1,
+                          width: l.spanDias * cellWidth - 2,
+                          top: 2,
+                          height: 22,
+                          backgroundColor: l.asignacion.tipoActividadColor,
+                          color: getContrastColor(l.asignacion.tipoActividadColor),
+                        }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onSelectAssignment?.(l.asignacion.id);
+                        }}
+                        title={`${l.asignacion.nombre ?? l.asignacion.tipoActividadNombre}\n${l.asignacion.fechaInicio} → ${l.asignacion.fechaFin}\nEstado: ${l.asignacion.estado}`}
+                      >
+                        <span className="truncate text-[9px] font-medium leading-none">
+                          {l.asignacion.fechaInicio} → {l.asignacion.fechaFin}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+            </Fragment>
           );
         })}
 
@@ -441,7 +532,7 @@ export function VirtualizedTimeGrid({
   );
 }
 
-// Bloque individual asignado a un carril (arrastrable: mover a otro dÃ­a/recurso)
+// Bloque individual asignado a un carril (arrastrable: mover a otro día/recurso)
 function AssignmentBlock({
   layout,
   cellWidth,
@@ -487,33 +578,33 @@ function AssignmentBlock({
         e.stopPropagation();
         onSelect?.();
       }}
-      title={`${asignacion.proyectoNombre} Â· ${asignacion.tipoActividadNombre}\n${asignacion.fechaInicio} â†’ ${asignacion.fechaFin}${tieneConflicto ? '\nâš ï¸ Conflicto: solape con otra asignaciÃ³n' : ''}${draggable ? '\nArrastra para mover' : ''}`}
+      title={`${asignacion.proyectoNombre} · ${asignacion.nombre ?? asignacion.tipoActividadNombre}\n${asignacion.fechaInicio} → ${asignacion.fechaFin}${tieneConflicto ? '\n⚠️ Conflicto: solape con otra asignación' : ''}${draggable ? '\nArrastra para mover' : ''}`}
     >
-      {clippedLeft && <span className="shrink-0 text-[9px]">â—‚</span>}
+      {clippedLeft && <span className="shrink-0 text-[9px]">◂</span>}
       <span className="truncate text-[10px] font-medium leading-none">
-        {asignacion.proyectoNombre}
+        {asignacion.nombre ?? asignacion.proyectoNombre}
       </span>
       {tieneConflicto && <AlertTriangle className="h-3 w-3 shrink-0" />}
-      {clippedRight && <span className="shrink-0 text-[9px]">â–¸</span>}
+      {clippedRight && <span className="shrink-0 text-[9px]">▸</span>}
     </div>
   );
 }
 
 // ============================================
-// VISTA GANTT â€” ESTILO MS PROJECT (decisiÃ³n d)
+// VISTA GANTT — ESTILO MS PROJECT (decisión d)
 // ============================================
 
 const GANTT_ROW_HEIGHT = 36;
 
 // Columnas de la tabla de tareas (estilo MS Project)
 const GANTT_COLS = {
-  num: 34,        // NÂ°
+  num: 34,        // N°
   nombre: 190,    // Tarea
   estado: 96,     // Estado
   asignado: 120,  // Asignado a
   inicio: 76,     // Fecha inicio
-  termino: 76,    // Fecha tÃ©rmino
-  duracion: 46,   // DuraciÃ³n (dÃ­as)
+  termino: 76,    // Fecha término
+  duracion: 46,   // Duración (días)
   avance: 64,     // % avance
   comentarios: 150, // Comentarios
 } as const;
@@ -577,7 +668,7 @@ export function ProjectGanttView({
     window.addEventListener('mouseup', up);
   };
 
-  // Hijos directos por id (para colapsar/desplegar jerÃ¡rquicamente)
+  // Hijos directos por id (para colapsar/desplegar jerárquicamente)
   const childrenMap = useMemo(() => {
     const map = new Map<string, GanttTaskItem[]>();
     tareas.forEach((t) => {
@@ -621,16 +712,17 @@ export function ProjectGanttView({
   const gridWidth = totalDias * cellWidth;
   const headerHeight = 46;
 
-  // Filas visibles: indentaciÃ³n por jerarquÃ­a + colapso de padres
+  // Filas visibles: indentación por jerarquía + colapso de padres
   const rows = useMemo(() => {
-    // Profundidad genÃ©rica: proyectoâ†’actividadâ†’tarea y asignaciones bajo el proyecto.
-    // El backend emite las filas en orden jerÃ¡rquico, asÃ­ que una pasada basta.
+    // Profundidad genérica: proyecto→actividad→tarea y asignaciones bajo el proyecto.
+    // El backend emite las filas en orden jerárquico, así que una pasada basta.
     const depthMap = new Map<string, number>();
     tareas.forEach((t) => {
       if (t.tipo === 'PROYECTO') {
         depthMap.set(t.id, t.parentId ? (depthMap.get(t.parentId) ?? 0) + 1 : 0);
       } else if (t.tipo === 'ASIGNACION') {
-        depthMap.set(t.id, (depthMap.get(t.proyectoId) ?? 0) + 1);
+        // Puede colgar del proyecto, una actividad o una tarea (vínculo WBS)
+        depthMap.set(t.id, (depthMap.get(t.parentId ?? t.proyectoId) ?? 0) + 1);
       } else {
         // ACTIVIDAD (padre=proyecto) y TAREA (padre=actividad)
         const parentDepth = t.parentId ? depthMap.get(t.parentId) : 0;
@@ -638,7 +730,7 @@ export function ProjectGanttView({
       }
     });
 
-    // EmisiÃ³n recursiva respetando el estado de colapso
+    // Emisión recursiva respetando el estado de colapso
     const visibles: GanttTaskItem[] = [];
     const emitidos = new Set<string>();
     const emit = (t: GanttTaskItem) => {
@@ -649,8 +741,8 @@ export function ProjectGanttView({
       (childrenMap.get(t.id) ?? []).forEach(emit);
     };
     tareas.filter((t) => !t.parentId).forEach(emit);
-    // HuÃ©rfanos reales: solo si su padre NO existe en el Ã¡rbol actual.
-    // (Los hijos de padres colapsados NO son huÃ©rfanos: deben permanecer ocultos)
+    // Huérfanos reales: solo si su padre NO existe en el árbol actual.
+    // (Los hijos de padres colapsados NO son huérfanos: deben permanecer ocultos)
     const idsExistentes = new Set(tareas.map((t) => t.id));
     tareas.forEach((t) => {
       if (!emitidos.has(t.id) && (!t.parentId || !idsExistentes.has(t.parentId))) emit(t);
@@ -681,7 +773,7 @@ export function ProjectGanttView({
     return geo;
   }, [rows, fechaInicio, cellWidth]);
 
-  // Flechas de dependencia (fin â†’ inicio)
+  // Flechas de dependencia (fin → inicio)
   const dependencyPaths = useMemo(() => {
     const paths: { d: string; critica: boolean }[] = [];
     tareas.forEach((t) => {
@@ -713,12 +805,12 @@ export function ProjectGanttView({
             style={{ width: leftWidth, height: headerHeight }}
           >
             {[
-              { key: 'num', label: 'NÂ°', width: colWidths.num, center: true },
+              { key: 'num', label: 'N°', width: colWidths.num, center: true },
               { key: 'nombre', label: 'Tarea', width: colWidths.nombre },
               { key: 'estado', label: 'Estado', width: colWidths.estado },
               { key: 'asignado', label: 'Asignado a', width: colWidths.asignado },
               { key: 'inicio', label: 'Inicio', width: colWidths.inicio },
-              { key: 'termino', label: 'TÃ©rmino', width: colWidths.termino },
+              { key: 'termino', label: 'Término', width: colWidths.termino },
               { key: 'duracion', label: 'Dur', width: colWidths.duracion, center: true },
               { key: 'avance', label: 'Avance', width: colWidths.avance, center: true },
               { key: 'comentarios', label: 'Comentarios', width: colWidths.comentarios },
@@ -887,7 +979,7 @@ function GanttRow({
       : tarea.tipo === 'TAREA'
       ? '#64748b'
       : '#94a3b8');
-  // GeometrÃ­a de barra por nivel
+  // Geometría de barra por nivel
   const barTop =
     tarea.tipo === 'PROYECTO' ? 12 : tarea.tipo === 'ACTIVIDAD' ? 13 : tarea.tipo === 'TAREA' ? 15 : 13;
   const barHeight =
@@ -927,7 +1019,7 @@ function GanttRow({
         className="sticky left-0 z-20 flex flex-shrink-0 items-stretch border-r bg-card shadow-[4px_0_6px_-4px_rgba(0,0,0,0.15)]"
         style={{ width: leftWidth, height: GANTT_ROW_HEIGHT }}
       >
-        {/* NÂ° */}
+        {/* N° */}
         <div
           className={cn(
             'flex flex-shrink-0 items-center justify-center border-r px-1 text-xs tabular-nums text-muted-foreground',
@@ -938,7 +1030,7 @@ function GanttRow({
           {row.index + 1}
         </div>
 
-        {/* Nombre de la tarea (con jerarquÃ­a y flechita de colapso) */}
+        {/* Nombre de la tarea (con jerarquía y flechita de colapso) */}
         <div
           className={cn(
             'flex min-w-0 flex-shrink-0 cursor-pointer flex-col justify-center border-r px-2',
@@ -971,7 +1063,7 @@ function GanttRow({
             {esProyecto ? (
               <>
                 <span className={cn('truncate text-sm leading-tight', esSubproyecto ? 'font-semibold' : 'font-bold')}>
-                  {esSubproyecto ? 'â†³ ' : ''}
+                  {esSubproyecto ? '↳ ' : ''}
                   {tarea.nombre}
                 </span>
                 {colapsada && row.totalHijos > 0 && (
@@ -987,14 +1079,14 @@ function GanttRow({
               </>
             ) : (
               <span className="truncate text-xs leading-tight text-muted-foreground">
-                {'Â· '}
+                {'· '}
                 {tarea.nombre}
               </span>
             )}
           </div>
           {esProyecto && tarea.esCritica && (
             <span className="w-fit rounded bg-red-100 px-1 text-[9px] font-semibold leading-tight text-red-700">
-              RUTA CRÃTICA
+              RUTA CRÍTICA
             </span>
           )}
         </div>
@@ -1032,7 +1124,7 @@ function GanttRow({
           {format(parseISO(tarea.fechaInicio), 'dd/MM/yy')}
         </div>
 
-        {/* Fecha tÃ©rmino */}
+        {/* Fecha término */}
         <div
           className={cn(
             'flex flex-shrink-0 items-center border-r px-1.5 text-xs tabular-nums',
@@ -1043,7 +1135,7 @@ function GanttRow({
           {format(parseISO(tarea.fechaFin), 'dd/MM/yy')}
         </div>
 
-        {/* DuraciÃ³n (dÃ­as) */}
+        {/* Duración (días) */}
         <div
           className={cn(
             'flex flex-shrink-0 items-center justify-center border-r px-1 text-xs tabular-nums text-muted-foreground',
@@ -1054,7 +1146,7 @@ function GanttRow({
           {spanDias}d
         </div>
 
-        {/* % Avance (editable en proyectos â€” decisiÃ³n e) */}
+        {/* % Avance (editable en proyectos — decisión e) */}
         <div
           className={cn(
             'flex flex-shrink-0 flex-col items-center justify-center gap-0.5 border-r px-1',
@@ -1147,7 +1239,7 @@ function GanttRow({
             backgroundColor: barColor,
             zIndex: 10,
           }}
-          title={`${tarea.nombre}\n${tarea.fechaInicio} â†’ ${tarea.fechaFin} Â· ${tarea.percentComplete}%${tarea.esCritica ? '\nâš ï¸ Ruta crÃ­tica' : ''}`}
+          title={`${tarea.nombre}\n${tarea.fechaInicio} → ${tarea.fechaFin} · ${tarea.percentComplete}%${tarea.esCritica ? '\n⚠️ Ruta crítica' : ''}`}
         >
           {/* Relleno de avance */}
           <div

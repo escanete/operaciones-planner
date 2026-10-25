@@ -55,7 +55,7 @@ export function AssignmentDetailPanel({ assignmentId, onClose, onEdit }: Assignm
           }
         }
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Error al cargar la asignación');
+        setError(err instanceof Error ? err.message : 'Error al cargar la actividad');
       } finally {
         setIsLoading(false);
       }
@@ -64,7 +64,7 @@ export function AssignmentDetailPanel({ assignmentId, onClose, onEdit }: Assignm
   }, [assignmentId]);
 
   const handleDelete = async () => {
-    if (!confirm('¿Eliminar esta asignación?')) return;
+    if (!confirm('¿Eliminar esta actividad?')) return;
     setIsDeleting(true);
     try {
       await api.delete(`/api/asignaciones/${assignmentId}`);
@@ -84,7 +84,7 @@ export function AssignmentDetailPanel({ assignmentId, onClose, onEdit }: Assignm
     <aside className="w-96 border-l bg-card flex flex-col overflow-hidden animate-in slide-in-from-right-5 duration-300">
       {/* Header */}
       <div className="flex items-center justify-between border-b p-4">
-        <h2 className="font-semibold">Detalle de Asignación</h2>
+        <h2 className="font-semibold">Detalle de Actividad</h2>
         <div className="flex items-center gap-1">
           {asignacion && (
             <>
@@ -139,6 +139,9 @@ export function AssignmentDetailPanel({ assignmentId, onClose, onEdit }: Assignm
                 {asignacion.tipoActividad?.nombre}
               </div>
               <h3 className="text-lg font-bold mt-1">{asignacion.proyecto?.nombre}</h3>
+              {asignacion.nombre && (
+                <p className="text-sm font-semibold opacity-95 mt-0.5">{asignacion.nombre}</p>
+              )}
               {proyectoPadre && (
                 <p className="text-xs opacity-90 mt-0.5">
                   ↳ Sub-proyecto de: <span className="font-semibold">{proyectoPadre.nombre}</span>
@@ -280,7 +283,7 @@ export function AssignmentDetailPanel({ assignmentId, onClose, onEdit }: Assignm
         <div className="border-t p-4 space-y-2">
           <Button className="w-full" onClick={onEdit}>
             <Edit className="mr-2 h-4 w-4" />
-            Editar asignación
+            Editar actividad
           </Button>
           <Button variant="outline" className="w-full">
             <MoreHorizontal className="mr-2 h-4 w-4" />

@@ -32,6 +32,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { useAuthStore } from '@/stores/authStore';
 import { api } from '@/services/api';
+import { AssignmentFormDialog } from '@/components/planning/AssignmentFormDialog';
 import {
   useProyectoWBS,
   useRecursos,
@@ -46,7 +47,7 @@ import {
   useDeleteSubtarea,
 } from '@/hooks/useApi';
 import { cn } from '@/lib/utils';
-import type { Actividad, Subtarea, Tarea, AsignacionResumen } from '@operaciones-planner/shared';
+import type { Actividad, Subtarea, Tarea, AsignacionResumen, Asignacion } from '@operaciones-planner/shared';
 
 // ============================================
 // PERMISOS (definición de roles acordada)
@@ -79,9 +80,14 @@ export function ProjectDetailPage() {
   const [dialog, setDialog] = useState<DialogConfig | null>(null);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [exporting, setExporting] = useState(false);
+  // Editar/eliminar actividades de planificación (asignaciones) desde el árbol
+  const [editingAsignacion, setEditingAsignacion] = useState<Asignacion | null>(null);
+  const [formAsignacionOpen, setFormAsignacionOpen] = useState(false);
 
   const rol = user?.rol ?? '';
   const canWBS = ROLES_FULL.includes(rol) || rol === 'JEFE_AREA';
+  // Quién puede editar asignaciones de planificación (mismo criterio que el backend)
+  const canPlanificar = ['SUPER_ADMIN', 'ADMIN_DEPTO', 'PLANIFICADOR'].includes(rol);
   const miRecursoId = user?.recursoId ?? null;
   const puedeEditarSubtareaDe = (tarea: Tarea) =>
     canWBS ||
@@ -105,6 +111,35 @@ export function ProjectDetailPage() {
       queryClient.invalidateQueries({ queryKey: ['proyectos'] });
     } catch (err) {
       alert('No se pudo actualizar: ' + (err instanceof Error ? err.message : String(err)));
+    }
+  };
+
+  // ===== Editar / eliminar actividades de planificación desde el árbol =====
+  const handleEditAsignacion = async (id: string) => {
+    try {
+      const full = await api.get<Asignacion>(`/api/asignaciones/${id}`);
+      setEditingAsignacion(full);
+      setFormAsignacionOpen(true);
+    } catch (err) {
+      alert('No se pudo cargar la actividad: ' + (err instanceof Error ? err.message : String(err)));
+    }
+  };
+
+  const handleDeleteAsignacion = async (id: string) => {
+    const ok = confirm(
+      '¿Eliminar esta actividad de planificación?\n\n' +
+        'Se quita del calendario del recurso y del árbol del proyecto.\n' +
+        'La tarea/subtarea WBS a la que estaba vinculada NO se elimina.'
+    );
+    if (!ok) return;
+    try {
+      await api.delete(`/api/asignaciones/${id}`);
+      await queryClient.invalidateQueries({ queryKey: ['proyecto-wbs', proyectoId ?? '' ] });
+      await queryClient.invalidateQueries({ queryKey: ['planning-grid'] });
+      await queryClient.invalidateQueries({ queryKey: ['project-gantt'] });
+      await queryClient.invalidateQueries({ queryKey: ['asignaciones'] });
+    } catch (err) {
+      alert('No se pudo eliminar: ' + (err instanceof Error ? err.message : String(err)));
     }
   };
 
@@ -264,7 +299,14 @@ export function ProjectDetailPage() {
                 </div>
                 <div className="divide-y">
                   {data!.asignaciones.map((a) => (
-                    <AsignacionRow key={a.id} a={a} indent="pl-10" />
+                    <AsignacionRow
+                      key={a.id}
+                      a={a}
+                      indent="pl-10"
+                      canEdit={canPlanificar}
+                      onEdit={handleEditAsignacion}
+                      onDelete={handleDeleteAsignacion}
+                    />
                   ))}
                 </div>
               </Card>
@@ -276,6 +318,9 @@ export function ProjectDetailPage() {
                 actividad={actividad}
                 canWBS={canWBS}
                 puedeEditarSubtareaDe={puedeEditarSubtareaDe}
+                canEditAsignacion={canPlanificar}
+                onEditAsignacion={handleEditAsignacion}
+                onDeleteAsignacion={handleDeleteAsignacion}
                 collapsed={collapsed}
                 toggleCollapse={toggleCollapse}
                 openDialog={setDialog}
@@ -294,6 +339,16 @@ export function ProjectDetailPage() {
           onClose={() => setDialog(null)}
         />
       )}
+
+      {/* ===== Formulario de edición de actividades de planificación ===== */}
+      <AssignmentFormDialog
+        open={formAsignacionOpen}
+        onOpenChange={(open) => {
+          setFormAsignacionOpen(open);
+          if (!open) setEditingAsignacion(null);
+        }}
+        asignacion={editingAsignacion}
+      />
     </div>
   );
 }
@@ -306,6 +361,9 @@ function ActividadCard({
   actividad,
   canWBS,
   puedeEditarSubtareaDe,
+  canEditAsignacion,
+  onEditAsignacion,
+  onDeleteAsignacion,
   collapsed,
   toggleCollapse,
   openDialog,
@@ -313,6 +371,9 @@ function ActividadCard({
   actividad: Actividad;
   canWBS: boolean;
   puedeEditarSubtareaDe: (tarea: Tarea) => boolean;
+  canEditAsignacion?: boolean;
+  onEditAsignacion?: (id: string) => void;
+  onDeleteAsignacion?: (id: string) => void;
   collapsed: Set<string>;
   toggleCollapse: (key: string) => void;
   openDialog: (d: DialogConfig) => void;
@@ -586,7 +647,14 @@ function ActividadCard({
                       </div>
                       {/* Actividades de planificación vinculadas a esta subtarea */}
                       {(subtarea.asignaciones ?? []).map((a) => (
-                        <AsignacionRow key={a.id} a={a} indent="pl-24" />
+                        <AsignacionRow
+                          key={a.id}
+                          a={a}
+                          indent="pl-24"
+                          canEdit={canEditAsignacion}
+                          onEdit={onEditAsignacion}
+                          onDelete={onDeleteAsignacion}
+                        />
                       ))}
                     </Fragment>
                   ))}
@@ -594,7 +662,14 @@ function ActividadCard({
                 {/* Actividades de planificación vinculadas a esta tarea */}
                 {!tareaColapsada &&
                   (tarea.asignaciones ?? []).map((a) => (
-                    <AsignacionRow key={a.id} a={a} indent="pl-16" />
+                    <AsignacionRow
+                      key={a.id}
+                      a={a}
+                      indent="pl-16"
+                      canEdit={canEditAsignacion}
+                      onEdit={onEditAsignacion}
+                      onDelete={onDeleteAsignacion}
+                    />
                   ))}
               </div>
             );
@@ -602,7 +677,14 @@ function ActividadCard({
 
           {/* Actividades de planificación vinculadas directo a la actividad */}
           {(actividad.asignaciones ?? []).map((a) => (
-            <AsignacionRow key={a.id} a={a} indent="pl-10" />
+            <AsignacionRow
+              key={a.id}
+              a={a}
+              indent="pl-10"
+              canEdit={canEditAsignacion}
+              onEdit={onEditAsignacion}
+              onDelete={onDeleteAsignacion}
+            />
           ))}
 
           {(actividad.tareas ?? []).length === 0 && (actividad.asignaciones ?? []).length === 0 && (
@@ -621,7 +703,19 @@ function ActividadCard({
 // ============================================
 
 // Fila de actividad de planificación dentro del árbol WBS
-function AsignacionRow({ a, indent = 'pl-10' }: { a: AsignacionResumen; indent?: string }) {
+function AsignacionRow({
+  a,
+  indent = 'pl-10',
+  canEdit = false,
+  onEdit,
+  onDelete,
+}: {
+  a: AsignacionResumen;
+  indent?: string;
+  canEdit?: boolean;
+  onEdit?: (id: string) => void;
+  onDelete?: (id: string) => void;
+}) {
   const inicio = new Date(a.fechaInicio).toLocaleDateString('es-CL', {
     day: '2-digit',
     month: '2-digit',
@@ -629,7 +723,10 @@ function AsignacionRow({ a, indent = 'pl-10' }: { a: AsignacionResumen; indent?:
   const fin = new Date(a.fechaFin).toLocaleDateString('es-CL', { day: '2-digit', month: '2-digit' });
   return (
     <div
-      className={cn('flex items-center gap-2 py-1.5 pr-3 text-xs hover:bg-accent/30', indent)}
+      className={cn(
+        'group flex items-center gap-2 py-1.5 pr-3 text-xs hover:bg-accent/30',
+        indent
+      )}
       title={`${a.nombre ?? a.tipoActividadNombre} — ${a.recursoNombre}\n${inicio} → ${fin} · ${a.estado}`}
     >
       <CalendarClock className="h-3 w-3 shrink-0 text-muted-foreground" />
@@ -648,6 +745,28 @@ function AsignacionRow({ a, indent = 'pl-10' }: { a: AsignacionResumen; indent?:
       >
         {a.estado}
       </Badge>
+      {canEdit && (
+        <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-6 w-6"
+            title="Editar actividad de planificación"
+            onClick={() => onEdit?.(a.id)}
+          >
+            <Pencil className="h-3 w-3" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-6 w-6"
+            title="Eliminar actividad de planificación"
+            onClick={() => onDelete?.(a.id)}
+          >
+            <Trash2 className="h-3 w-3 text-destructive" />
+          </Button>
+        </div>
+      )}
     </div>
   );
 }

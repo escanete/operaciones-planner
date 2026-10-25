@@ -1099,8 +1099,14 @@ function GanttRow({
             esProyecto && 'bg-muted/50'
           )}
           style={{ width: colWidths.nombre, paddingLeft: 8 + depth * 14 }}
-          onClick={() => esProyecto && onSelectProject?.(tarea.proyectoId)}
-          title={tarea.nombre}
+          onClick={() =>
+            (esProyecto || tarea.tipo === 'ASIGNACION') && onSelectProject?.(tarea.proyectoId)
+          }
+          title={
+            esProyecto || tarea.tipo === 'ASIGNACION'
+              ? `${tarea.nombre}\nClic para abrir el proyecto y editar`
+              : tarea.nombre
+          }
         >
           <div className="flex min-w-0 items-center gap-1">
             {row.tieneHijos ? (
@@ -1298,7 +1304,11 @@ function GanttRow({
             'absolute flex items-center overflow-hidden rounded-[3px] transition-[left] duration-75',
             esProyecto ? 'font-bold' : '',
             tarea.esCritica && 'ring-2 ring-amber-500',
-            puedeArrastrarBarra ? 'cursor-grab' : tarea.tipo === 'PROYECTO' ? 'cursor-pointer' : ''
+            puedeArrastrarBarra
+              ? 'cursor-grab'
+              : tarea.tipo === 'PROYECTO' || tarea.tipo === 'ASIGNACION'
+              ? 'cursor-pointer'
+              : ''
           )}
           style={{
             left: (startOffset + dragDays) * cellWidth + 1,
@@ -1311,9 +1321,11 @@ function GanttRow({
           }}
           onMouseDown={handleBarMouseDown}
           onClick={() => {
-            if (!puedeArrastrarBarra && tarea.tipo === 'PROYECTO') onSelectProject?.(tarea.proyectoId);
+            if (!puedeArrastrarBarra && (tarea.tipo === 'PROYECTO' || tarea.tipo === 'ASIGNACION')) {
+              onSelectProject?.(tarea.proyectoId);
+            }
           }}
-          title={`${tarea.nombre}\n${tarea.fechaInicio} → ${tarea.fechaFin} · ${tarea.percentComplete}%${tarea.esCritica ? '\n★ Marcado como relevante' : ''}${puedeArrastrarBarra ? '\nArrastra para reprogramar' : tarea.tipo === 'PROYECTO' ? '\nClic para abrir el proyecto' : ''}`}
+          title={`${tarea.nombre}\n${tarea.fechaInicio} → ${tarea.fechaFin} · ${tarea.percentComplete}%${tarea.esCritica ? '\n★ Marcado como relevante' : ''}${puedeArrastrarBarra ? '\nArrastra para reprogramar' : tarea.tipo === 'PROYECTO' || tarea.tipo === 'ASIGNACION' ? '\nClic para abrir el proyecto' : ''}`}
         >
           {/* Relleno de avance */}
           <div

@@ -24,6 +24,7 @@ const materialSchema = z.object({
   unidad: z.string().max(20).optional().nullable(),
   estado: z.enum(ESTADOS).default('PENDIENTE'),
   recursoId: z.string().optional().nullable(),
+  catalogoId: z.string().optional().nullable(), // ítem del catálogo global (opcional)
   notas: z.string().optional().nullable(),
 });
 
@@ -46,6 +47,7 @@ materialesRoutes.get('/', async (c) => {
     where: { proyectoId },
     include: {
       recurso: { select: { id: true, nombre: true, apellido: true, codigo: true } },
+      catalogo: { select: { id: true, nombre: true, categoria: true, unidadBase: true } },
     },
     orderBy: [{ createdAt: 'asc' }, { nombre: 'asc' }],
   });
@@ -72,6 +74,15 @@ materialesRoutes.post('/', async (c) => {
   });
   if (!proyecto) return c.json({ error: 'Proyecto no encontrado' }, 404);
 
+  // Si viene del catálogo, validar que exista
+  if (parsed.data.catalogoId) {
+    const cat = await prisma.materialCatalogo.findUnique({
+      where: { id: parsed.data.catalogoId },
+      select: { id: true },
+    });
+    if (!cat) return c.json({ error: 'Ítem del catálogo no encontrado' }, 400);
+  }
+
   const material = await prisma.material.create({
     data: {
       proyectoId: parsed.data.proyectoId,
@@ -82,11 +93,13 @@ materialesRoutes.post('/', async (c) => {
       unidad: parsed.data.unidad ?? undefined,
       estado: parsed.data.estado,
       recursoId: parsed.data.recursoId ?? undefined,
+      catalogoId: parsed.data.catalogoId ?? undefined,
       notas: parsed.data.notas ?? undefined,
       creadoPorId: user.id,
     },
     include: {
       recurso: { select: { id: true, nombre: true, apellido: true, codigo: true } },
+      catalogo: { select: { id: true, nombre: true, categoria: true, unidadBase: true } },
     },
   });
 
@@ -121,10 +134,12 @@ materialesRoutes.put('/:id', async (c) => {
       ...(d.unidad !== undefined ? { unidad: d.unidad ?? undefined } : {}),
       ...(d.estado !== undefined ? { estado: d.estado } : {}),
       ...(d.recursoId !== undefined ? { recursoId: d.recursoId ?? undefined } : {}),
+      ...(d.catalogoId !== undefined ? { catalogoId: d.catalogoId ?? undefined } : {}),
       ...(d.notas !== undefined ? { notas: d.notas ?? undefined } : {}),
     },
     include: {
       recurso: { select: { id: true, nombre: true, apellido: true, codigo: true } },
+      catalogo: { select: { id: true, nombre: true, categoria: true, unidadBase: true } },
     },
   });
 

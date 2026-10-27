@@ -17,6 +17,7 @@ import type {
   Tarea,
   Subtarea,
   Material,
+  MaterialCatalogo,
   Etiqueta,
   CargaTrabajoResumen,
   OcupacionProyectoResumen,
@@ -644,6 +645,49 @@ export function useDeleteEtiqueta() {
   return useMutation({
     mutationFn: (id: string) => api.delete(`/api/etiquetas/${id}`),
     onSuccess: () => invalidateEtiquetas(queryClient),
+  });
+}
+
+// ============================================
+// CATÁLOGO GLOBAL DE MATERIALES
+// ============================================
+export function useMaterialesCatalogo(soloActivos = false) {
+  return useQuery({
+    queryKey: ['materiales-catalogo', soloActivos],
+    queryFn: () =>
+      api.get<MaterialCatalogo[]>(`/api/materiales-catalogo${soloActivos ? '?activo=true' : ''}`),
+  });
+}
+
+function invalidateMaterialesCatalogo(queryClient: ReturnType<typeof useQueryClient>) {
+  queryClient.invalidateQueries({ queryKey: ['materiales-catalogo'] });
+  // Los materiales de proyectos incluyen el vínculo con el catálogo
+  queryClient.invalidateQueries({ queryKey: ['materiales'] });
+}
+
+export function useCreateMaterialCatalogo() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (data: Record<string, unknown>) =>
+      api.post<MaterialCatalogo>('/api/materiales-catalogo', data),
+    onSuccess: () => invalidateMaterialesCatalogo(queryClient),
+  });
+}
+
+export function useUpdateMaterialCatalogo() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, data }: { id: string; data: Record<string, unknown> }) =>
+      api.put<MaterialCatalogo>(`/api/materiales-catalogo/${id}`, data),
+    onSuccess: () => invalidateMaterialesCatalogo(queryClient),
+  });
+}
+
+export function useDeleteMaterialCatalogo() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.delete(`/api/materiales-catalogo/${id}`),
+    onSuccess: () => invalidateMaterialesCatalogo(queryClient),
   });
 }
 

@@ -17,61 +17,61 @@ datasource db {
 // ============================================
 
 model Departamento {
-  id          String   @id @default(cuid())
-  nombre      String   @unique
+  id          String    @id @default(cuid())
+  nombre      String    @unique
   descripcion String?
-  color       String?  // Hex color para UI
-  orden       Int      @default(0)
-  activo      Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  color       String? // Hex color para UI
+  orden       Int       @default(0)
+  activo      Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
   equipos     Equipo[]
   recursos    Recurso[]
-  usuarios    User[]     @relation("UserDepartamento")
+  usuarios    User[]    @relation("UserDepartamento")
 
   @@map("departamentos")
 }
 
 model Equipo {
-  id            String    @id @default(cuid())
-  nombre        String
+  id             String       @id @default(cuid())
+  nombre         String
   departamentoId String
-  departamento  Departamento @relation(fields: [departamentoId], references: [id], onDelete: Cascade)
-  descripcion   String?
-  liderId       String?   // Recurso que lidera
-  lider         Recurso?  @relation("EquipoLider", fields: [liderId], references: [id], onDelete: SetNull)
-  orden         Int       @default(0)
-  activo        Boolean   @default(true)
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-  recursos      Recurso[]
+  departamento   Departamento @relation(fields: [departamentoId], references: [id], onDelete: Cascade)
+  descripcion    String?
+  liderId        String? // Recurso que lidera
+  lider          Recurso?     @relation("EquipoLider", fields: [liderId], references: [id], onDelete: SetNull)
+  orden          Int          @default(0)
+  activo         Boolean      @default(true)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  recursos       Recurso[]
 
   @@unique([departamentoId, nombre])
   @@map("equipos")
 }
 
 model Cargo {
-  id          String   @id @default(cuid())
-  nombre      String   @unique
+  id          String    @id @default(cuid())
+  nombre      String    @unique
   descripcion String?
-  nivel       Int      @default(0) // Jerarquía: 1=Operativo, 2=Supervisor, etc.
-  color       String?  // Para UI
-  activo      Boolean  @default(true)
+  nivel       Int       @default(0) // Jerarquía: 1=Operativo, 2=Supervisor, etc.
+  color       String? // Para UI
+  activo      Boolean   @default(true)
   recursos    Recurso[]
 
   @@map("cargos")
 }
 
 model TipoActividad {
-  id          String   @id @default(cuid())
-  nombre      String   @unique // "Proyecto", "Informe", "Capacitación", etc.
-  color       String   @default("#00B050") // Hex
-  icono       String?  // Icon name for UI
-  billable    Boolean  @default(true) // Cuenta como carga de trabajo
-  requiereProyecto Boolean @default(true)
-  orden       Int      @default(0)
-  activo      Boolean  @default(true)
-  createdAt   DateTime @default(now())
+  id               String   @id @default(cuid())
+  nombre           String   @unique // "Proyecto", "Informe", "Capacitación", etc.
+  color            String   @default("#00B050") // Hex
+  icono            String? // Icon name for UI
+  billable         Boolean  @default(true) // Cuenta como carga de trabajo
+  requiereProyecto Boolean  @default(true)
+  orden            Int      @default(0)
+  activo           Boolean  @default(true)
+  createdAt        DateTime @default(now())
 
   asignaciones Asignacion[]
 
@@ -79,51 +79,51 @@ model TipoActividad {
 }
 
 model Cliente {
-  id          String   @id @default(cuid())
-  nombre      String   @unique
-  codigo      String?  @unique
-  direccion   String?
-  contacto    String?
-  email       String?
-  telefono    String?
-  activo      Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  proyectos   Proyecto[]
+  id        String     @id @default(cuid())
+  nombre    String     @unique
+  codigo    String?    @unique
+  direccion String?
+  contacto  String?
+  email     String?
+  telefono  String?
+  activo    Boolean    @default(true)
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+  proyectos Proyecto[]
 
   @@map("clientes")
 }
 
 model Proyecto {
-  id          String   @id @default(cuid())
-  nombre      String
-  codigo      String?  @unique
-  clienteId   String?
-  cliente     Cliente? @relation(fields: [clienteId], references: [id], onDelete: SetNull)
-  descripcion String?
-  fechaInicio DateTime?
-  fechaFin    DateTime?
-  estado      String   @default("PLANIFICACION") // PLANIFICACION, ACTIVO, EN_PAUSA, FINALIZADO, CANCELADO
-  color       String?  // Override color por proyecto
-  activo      Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id           String       @id @default(cuid())
+  nombre       String
+  codigo       String?      @unique
+  clienteId    String?
+  cliente      Cliente?     @relation(fields: [clienteId], references: [id], onDelete: SetNull)
+  descripcion  String?
+  fechaInicio  DateTime?
+  fechaFin     DateTime?
+  estado       String       @default("PLANIFICACION") // PLANIFICACION, ACTIVO, EN_PAUSA, FINALIZADO, CANCELADO
+  color        String? // Override color por proyecto
+  activo       Boolean      @default(true)
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
   asignaciones Asignacion[]
   actividades  Actividad[]
 
   // Planificación tipo MS Project (decisión c)
-  scheduledStart   DateTime? // Inicio programado (Gantt)
-  scheduledEnd     DateTime? // Término programado (Gantt)
-  percentComplete  Float?    // 0-100 avance del proyecto
-  subprojectId     String?   // Proyecto padre (jerarquía sub-proyectos)
-  subproyecto       Proyecto? @relation("ProyectoJerarquia", fields: [subprojectId], references: [id], onDelete: SetNull)
-  subproyectos     Proyecto[] @relation("ProyectoJerarquia")
-  dependencies     String?  // JSON string con IDs de predecesores (SQLite no soporta Json nativo)
-  relevante        Boolean  @default(false) // Marcación manual de importancia (reemplaza la ruta crítica automática)
+  scheduledStart  DateTime? // Inicio programado (Gantt)
+  scheduledEnd    DateTime? // Término programado (Gantt)
+  percentComplete Float? // 0-100 avance del proyecto
+  subprojectId    String? // Proyecto padre (jerarquía sub-proyectos)
+  subproyecto     Proyecto?  @relation("ProyectoJerarquia", fields: [subprojectId], references: [id], onDelete: SetNull)
+  subproyectos    Proyecto[] @relation("ProyectoJerarquia")
+  dependencies    String? // JSON string con IDs de predecesores (SQLite no soporta Json nativo)
+  relevante       Boolean    @default(false) // Marcación manual de importancia (reemplaza la ruta crítica automática)
 
-  materiales       Material[]
+  materiales Material[]
 
-  etiquetas        ProyectoEtiqueta[]
+  etiquetas ProyectoEtiqueta[]
 
   @@index([clienteId])
   @@index([estado])
@@ -176,10 +176,10 @@ model ActividadEtiqueta {
 }
 
 model TareaEtiqueta {
-  tareaId   String
-  tarea     Tarea   @relation(fields: [tareaId], references: [id], onDelete: Cascade)
+  tareaId    String
+  tarea      Tarea    @relation(fields: [tareaId], references: [id], onDelete: Cascade)
   etiquetaId String
-  etiqueta  Etiqueta @relation(fields: [etiquetaId], references: [id], onDelete: Cascade)
+  etiqueta   Etiqueta @relation(fields: [etiquetaId], references: [id], onDelete: Cascade)
 
   @@id([tareaId, etiquetaId])
   @@map("tarea_etiquetas")
@@ -189,7 +189,7 @@ model SubtareaEtiqueta {
   subtareaId String
   subtarea   Subtarea @relation(fields: [subtareaId], references: [id], onDelete: Cascade)
   etiquetaId String
-  etiqueta   Etiqueta  @relation(fields: [etiquetaId], references: [id], onDelete: Cascade)
+  etiqueta   Etiqueta @relation(fields: [etiquetaId], references: [id], onDelete: Cascade)
 
   @@id([subtareaId, etiquetaId])
   @@map("subtarea_etiquetas")
@@ -199,7 +199,7 @@ model AsignacionEtiqueta {
   asignacionId String
   asignacion   Asignacion @relation(fields: [asignacionId], references: [id], onDelete: Cascade)
   etiquetaId   String
-  etiqueta     Etiqueta  @relation(fields: [etiquetaId], references: [id], onDelete: Cascade)
+  etiqueta     Etiqueta   @relation(fields: [etiquetaId], references: [id], onDelete: Cascade)
 
   @@id([asignacionId, etiquetaId])
   @@map("asignacion_etiquetas")
@@ -211,23 +211,46 @@ model AsignacionEtiqueta {
 // vincula el material con un activo del catálogo)
 // ============================================
 
+// Catálogo global: definiciones reutilizables ("Cable coaxial", "Radio RTU"),
+// con unidad base y vínculo opcional a un recurso-herramienta del sistema.
+// Las instancias por proyecto (Material) referencian al catálogo.
+model MaterialCatalogo {
+  id          String     @id @default(cuid())
+  nombre      String     @unique
+  categoria   String?
+  unidadBase  String? // "un", "mt", "kg" — precarga la unidad al usarlo en un proyecto
+  descripcion String?
+  // Vínculo con inventario: recurso tipo HERRAMIENTA/EQUIPO_TECNICO asociado
+  recursoId   String?
+  recurso     Recurso?   @relation("MaterialCatalogoActivo", fields: [recursoId], references: [id], onDelete: SetNull)
+  activo      Boolean    @default(true)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+  materiales  Material[] // instancias de este ítem en los proyectos
+
+  @@map("material_catalogos")
+}
+
 model Material {
-  id          String   @id @default(cuid())
+  id          String            @id @default(cuid())
   proyectoId  String
-  proyecto    Proyecto @relation(fields: [proyectoId], references: [id], onDelete: Cascade)
+  proyecto    Proyecto          @relation(fields: [proyectoId], references: [id], onDelete: Cascade)
   nombre      String
   descripcion String?
-  categoria   String?  // ej: ELECTRONICO, CONSUMIBLE, HERRAMIENTA, CABLE, OTRO (texto libre por ahora)
-  cantidad    Float    @default(1)
-  unidad      String?  // "un", "mt", "kg", "caja"...
-  estado      String   @default("PENDIENTE") // PENDIENTE, SOLICITADO, ENTREGADO, INSTALADO, DEVUELTO
+  categoria   String? // ej: ELECTRONICO, CONSUMIBLE, HERRAMIENTA, CABLE, OTRO (texto libre por ahora)
+  cantidad    Float             @default(1)
+  unidad      String? // "un", "mt", "kg", "caja"...
+  estado      String            @default("PENDIENTE") // PENDIENTE, SOLICITADO, ENTREGADO, INSTALADO, DEVUELTO
   // Vínculo futuro con inventario: activo/recurso del catálogo que representa este material
   recursoId   String?
-  recurso     Recurso? @relation("MaterialActivo", fields: [recursoId], references: [id], onDelete: SetNull)
+  recurso     Recurso?          @relation("MaterialActivo", fields: [recursoId], references: [id], onDelete: SetNull)
+  // Ítem del catálogo global (opcional; los materiales libres no lo tienen)
+  catalogoId  String?
+  catalogo    MaterialCatalogo? @relation(fields: [catalogoId], references: [id], onDelete: SetNull)
   notas       String?
   creadoPorId String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
 
   @@index([proyectoId])
   @@map("materiales")
@@ -238,49 +261,50 @@ model Material {
 // ============================================
 
 model Recurso {
-  id           String      @id @default(cuid())
-  codigo       String?     @unique // Código interno/empleado
-  nombre       String
-  apellido     String?
-  email        String?     @unique
-  telefono     String?
-  tipo         String      @default("PERSONA") // PERSONA, VEHICULO, EQUIPO_TECNICO, HERRAMIENTA, OTRO
-  cargoId      String?
-  cargo        Cargo?      @relation(fields: [cargoId], references: [id], onDelete: SetNull)
+  id             String       @id @default(cuid())
+  codigo         String?      @unique // Código interno/empleado
+  nombre         String
+  apellido       String?
+  email          String?      @unique
+  telefono       String?
+  tipo           String       @default("PERSONA") // PERSONA, VEHICULO, EQUIPO_TECNICO, HERRAMIENTA, OTRO
+  cargoId        String?
+  cargo          Cargo?       @relation(fields: [cargoId], references: [id], onDelete: SetNull)
   departamentoId String
-  departamento Departamento @relation(fields: [departamentoId], references: [id], onDelete: Cascade)
-  equipoId     String?
-  equipo       Equipo?     @relation(fields: [equipoId], references: [id], onDelete: SetNull)
-  
+  departamento   Departamento @relation(fields: [departamentoId], references: [id], onDelete: Cascade)
+  equipoId       String?
+  equipo         Equipo?      @relation(fields: [equipoId], references: [id], onDelete: SetNull)
+
   // Para vehículos/equipos
-  patente      String?     @unique
-  marca        String?
-  modelo       String?
-  capacidad    String?     // ej: "4 personas", "200kg"
-  
+  patente   String? @unique
+  marca     String?
+  modelo    String?
+  capacidad String? // ej: "4 personas", "200kg"
+
   // Jerarquía y área (decisiones a y b)
-  roleLevel    Int         @default(0) // Nivel jerárquico del rol (0=sin nivel, mayor=más autoridad)
-  areaId       String?     // Área/zona opcional dentro del departamento
-  
+  roleLevel Int     @default(0) // Nivel jerárquico del rol (0=sin nivel, mayor=más autoridad)
+  areaId    String? // Área/zona opcional dentro del departamento
+
   // Disponibilidad
   fechaIngreso DateTime?
   fechaEgreso  DateTime?
-  activo       Boolean     @default(true)
-  
+  activo       Boolean   @default(true)
+
   // Configuración visual
-  colorCalendario String?  // Override personal
-  
-  createdAt    DateTime    @default(now())
-  updatedAt    DateTime    @updatedAt
-  
-  asignaciones Asignacion[]
-  asignacionesCamioneta Asignacion[] @relation("AsignacionCamioneta")
-  disponibilidades Disponibilidad[]
-  ausencias     Ausencia[]
-  equiposLiderados Equipo[] @relation("EquipoLider")
-  tareasAsignadas TareaAsignado[]
-  materialesComoActivo Material[] @relation("MaterialActivo")
-  user          User?
+  colorCalendario String? // Override personal
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  asignaciones          Asignacion[]
+  asignacionesCamioneta Asignacion[]       @relation("AsignacionCamioneta")
+  disponibilidades      Disponibilidad[]
+  ausencias             Ausencia[]
+  equiposLiderados      Equipo[]           @relation("EquipoLider")
+  tareasAsignadas       TareaAsignado[]
+  materialesComoActivo  Material[]         @relation("MaterialActivo")
+  materialesCatalogo    MaterialCatalogo[] @relation("MaterialCatalogoActivo")
+  user                  User?
 
   @@index([departamentoId, activo])
   @@index([equipoId])
@@ -289,33 +313,33 @@ model Recurso {
 }
 
 model Disponibilidad {
-  id          String   @id @default(cuid())
-  recursoId   String
-  recurso     Recurso  @relation(fields: [recursoId], references: [id], onDelete: Cascade)
-  diaSemana   Int      // 1=Lun ... 7=Dom
-  horaInicio  String   // "08:00"
-  horaFin     String   // "18:00"
-  activa      Boolean  @default(true)
+  id         String  @id @default(cuid())
+  recursoId  String
+  recurso    Recurso @relation(fields: [recursoId], references: [id], onDelete: Cascade)
+  diaSemana  Int // 1=Lun ... 7=Dom
+  horaInicio String // "08:00"
+  horaFin    String // "18:00"
+  activa     Boolean @default(true)
 
   @@unique([recursoId, diaSemana])
   @@map("disponibilidades")
 }
 
 model Ausencia {
-  id          String        @id @default(cuid())
+  id          String   @id @default(cuid())
   recursoId   String
-  recurso     Recurso       @relation(fields: [recursoId], references: [id], onDelete: Cascade)
-  tipo        String        @default("VACACIONES") // VACACIONES, ENFERMEDAD, PERMISO, etc.
+  recurso     Recurso  @relation(fields: [recursoId], references: [id], onDelete: Cascade)
+  tipo        String   @default("VACACIONES") // VACACIONES, ENFERMEDAD, PERMISO, etc.
   fechaInicio DateTime
   fechaFin    DateTime
-  todoDia     Boolean       @default(true)
+  todoDia     Boolean  @default(true)
   horaInicio  String?
   horaFin     String?
   descripcion String?
-  aprobada    Boolean       @default(false)
+  aprobada    Boolean  @default(false)
   aprobadorId String?
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   @@index([recursoId, fechaInicio, fechaFin])
   @@map("ausencias")
@@ -326,54 +350,54 @@ model Ausencia {
 // ============================================
 
 model Asignacion {
-  id            String         @id @default(cuid())
-  proyectoId    String
-  proyecto      Proyecto       @relation(fields: [proyectoId], references: [id], onDelete: Cascade)
-  recursoId     String
-  recurso       Recurso        @relation(fields: [recursoId], references: [id], onDelete: Cascade)
+  id              String        @id @default(cuid())
+  proyectoId      String
+  proyecto        Proyecto      @relation(fields: [proyectoId], references: [id], onDelete: Cascade)
+  recursoId       String
+  recurso         Recurso       @relation(fields: [recursoId], references: [id], onDelete: Cascade)
   tipoActividadId String
-  tipoActividad TipoActividad  @relation(fields: [tipoActividadId], references: [id], onDelete: Cascade)
+  tipoActividad   TipoActividad @relation(fields: [tipoActividadId], references: [id], onDelete: Cascade)
 
   // Nombre de la actividad (texto libre: qué hace específicamente la persona)
-  nombre        String?
+  nombre String?
 
   // Vinculación WBS opcional: la asignación puede colgar de una actividad,
   // tarea o subtarea del proyecto (SetNull: si se borra el nodo, la
   // asignación sobrevive a nivel de proyecto)
-  actividadId   String?
-  actividad     Actividad?     @relation(fields: [actividadId], references: [id], onDelete: SetNull)
-  tareaId       String?
-  tarea         Tarea?         @relation(fields: [tareaId], references: [id], onDelete: SetNull)
-  subtareaId    String?
-  subtarea      Subtarea?      @relation(fields: [subtareaId], references: [id], onDelete: SetNull)
-  
+  actividadId String?
+  actividad   Actividad? @relation(fields: [actividadId], references: [id], onDelete: SetNull)
+  tareaId     String?
+  tarea       Tarea?     @relation(fields: [tareaId], references: [id], onDelete: SetNull)
+  subtareaId  String?
+  subtarea    Subtarea?  @relation(fields: [subtareaId], references: [id], onDelete: SetNull)
+
   // Temporal
-  fechaInicio   DateTime
-  fechaFin      DateTime
-  horaInicio    String?        // "08:00"
-  horaFin       String?        // "18:00"
-  todoDia       Boolean        @default(true)
-  
+  fechaInicio DateTime
+  fechaFin    DateTime
+  horaInicio  String? // "08:00"
+  horaFin     String? // "18:00"
+  todoDia     Boolean  @default(true)
+
   // Logística
-  ubicacion     String?        // Sitio, cliente, dirección
-  region        String?        // Región/Zona
-  camionetaId   String?        // Recurso tipo VEHICULO
-  camioneta     Recurso?       @relation("AsignacionCamioneta", fields: [camionetaId], references: [id], onDelete: SetNull)
-  alojamiento   Boolean        @default(false)
-  vueloId       String?        // Para logística aérea
-  
+  ubicacion   String? // Sitio, cliente, dirección
+  region      String? // Región/Zona
+  camionetaId String? // Recurso tipo VEHICULO
+  camioneta   Recurso? @relation("AsignacionCamioneta", fields: [camionetaId], references: [id], onDelete: SetNull)
+  alojamiento Boolean  @default(false)
+  vueloId     String? // Para logística aérea
+
   // Metadata
-  estado        String         @default("CONFIRMADA") // BORRADOR, CONFIRMADA, EN_CURSO, COMPLETADA, CANCELADA, CONFLICTO
-  prioridad     Int            @default(0)
+  estado        String   @default("CONFIRMADA") // BORRADOR, CONFIRMADA, EN_CURSO, COMPLETADA, CANCELADA, CONFLICTO
+  prioridad     Int      @default(0)
   notas         String?
   creadoPorId   String
-  creadoPor     User           @relation("AsignacionesCreadas", fields: [creadoPorId], references: [id], onDelete: Cascade)
-  creadoAt      DateTime       @default(now())
-  actualizadoAt DateTime       @updatedAt
-  
+  creadoPor     User     @relation("AsignacionesCreadas", fields: [creadoPorId], references: [id], onDelete: Cascade)
+  creadoAt      DateTime @default(now())
+  actualizadoAt DateTime @updatedAt
+
   // Para drag & drop y conflictos (optimistic locking)
-  version       Int            @default(1)
-  etiquetas     AsignacionEtiqueta[]
+  version   Int                  @default(1)
+  etiquetas AsignacionEtiqueta[]
 
   @@index([proyectoId, fechaInicio, fechaFin])
   @@index([recursoId, fechaInicio, fechaFin])
@@ -388,67 +412,67 @@ model Asignacion {
 // ============================================
 
 model Actividad {
-  id           String   @id @default(cuid())
-  proyectoId   String
-  proyecto     Proyecto @relation(fields: [proyectoId], references: [id], onDelete: Cascade)
-  nombre       String
-  descripcion  String?
-  orden        Int      @default(0)
+  id              String    @id @default(cuid())
+  proyectoId      String
+  proyecto        Proyecto  @relation(fields: [proyectoId], references: [id], onDelete: Cascade)
+  nombre          String
+  descripcion     String?
+  orden           Int       @default(0)
   // Fechas opcionales (útiles para el export a MS Project)
-  fechaInicio  DateTime?
-  fechaFin     DateTime?
+  fechaInicio     DateTime?
+  fechaFin        DateTime?
   // Avance: promedio automático de las tareas (0-100)
-  percentComplete Float  @default(0)
-  relevante       Boolean @default(false) // marcación manual de importancia
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  percentComplete Float     @default(0)
+  relevante       Boolean   @default(false) // marcación manual de importancia
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
-  tareas Tarea[]
+  tareas       Tarea[]
   asignaciones Asignacion[]
-  etiquetas ActividadEtiqueta[]
+  etiquetas    ActividadEtiqueta[]
 
   @@index([proyectoId])
   @@map("actividades")
 }
 
 model Tarea {
-  id          String    @id @default(cuid())
-  actividadId String
-  actividad   Actividad @relation(fields: [actividadId], references: [id], onDelete: Cascade)
-  nombre      String
-  descripcion String?
-  orden       Int       @default(0)
-  fechaInicio DateTime?
-  fechaFin    DateTime?
+  id              String    @id @default(cuid())
+  actividadId     String
+  actividad       Actividad @relation(fields: [actividadId], references: [id], onDelete: Cascade)
+  nombre          String
+  descripcion     String?
+  orden           Int       @default(0)
+  fechaInicio     DateTime?
+  fechaFin        DateTime?
   // Checkbox directo cuando no tiene subtareas; con subtareas es promedio automático
-  completada  Boolean   @default(false)
-  percentComplete Float @default(0)
-  relevante   Boolean  @default(false) // marcación manual de importancia
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  completada      Boolean   @default(false)
+  percentComplete Float     @default(0)
+  relevante       Boolean   @default(false) // marcación manual de importancia
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
-  subtareas Subtarea[]
-  asignados TareaAsignado[]
+  subtareas    Subtarea[]
+  asignados    TareaAsignado[]
   asignaciones Asignacion[]
-  etiquetas TareaEtiqueta[]
+  etiquetas    TareaEtiqueta[]
 
   @@index([actividadId])
   @@map("tareas")
 }
 
 model Subtarea {
-  id       String @id @default(cuid())
-  tareaId  String
-  tarea    Tarea  @relation(fields: [tareaId], references: [id], onDelete: Cascade)
-  nombre   String
-  descripcion String?
-  orden    Int    @default(0)
-  completada Boolean @default(false)
-  relevante Boolean @default(false) // marcación manual de importancia
+  id           String             @id @default(cuid())
+  tareaId      String
+  tarea        Tarea              @relation(fields: [tareaId], references: [id], onDelete: Cascade)
+  nombre       String
+  descripcion  String?
+  orden        Int                @default(0)
+  completada   Boolean            @default(false)
+  relevante    Boolean            @default(false) // marcación manual de importancia
   asignaciones Asignacion[]
-  etiquetas SubtareaEtiqueta[]
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  etiquetas    SubtareaEtiqueta[]
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
 
   @@index([tareaId])
   @@map("subtareas")
@@ -471,35 +495,35 @@ model TareaAsignado {
 // ============================================
 
 model User {
-  id            String    @id
-  email         String    @unique
-  emailVerified Boolean   @default(false)
+  id            String   @id
+  email         String   @unique
+  emailVerified Boolean  @default(false)
   name          String
   image         String?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-  
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
   // Campos custom
-  apellido      String
-  rol           String    @default("OPERADOR") // SUPER_ADMIN, ADMIN_DEPTO, PLANIFICADOR, OPERADOR, VISTA_SOLO
-  activo        Boolean   @default(true)
-  ultimoAcceso  DateTime?
-  
+  apellido     String
+  rol          String    @default("OPERADOR") // SUPER_ADMIN, ADMIN_DEPTO, PLANIFICADOR, OPERADOR, VISTA_SOLO
+  activo       Boolean   @default(true)
+  ultimoAcceso DateTime?
+
   // Jerarquía y alcance (decisiones a y b)
-  roleLevel     Int       @default(0) // Nivel jerárquico del rol
-  departmentId  String?   // Departamento (para usuarios sin recurso vinculado)
-  department    Departamento? @relation("UserDepartamento", fields: [departmentId], references: [id], onDelete: SetNull)
-  areaId        String?   // Área/zona
-  
+  roleLevel    Int           @default(0) // Nivel jerárquico del rol
+  departmentId String? // Departamento (para usuarios sin recurso vinculado)
+  department   Departamento? @relation("UserDepartamento", fields: [departmentId], references: [id], onDelete: SetNull)
+  areaId       String? // Área/zona
+
   // Relación opcional con Recurso
-  recursoId     String?   @unique
-  recurso       Recurso?  @relation(fields: [recursoId], references: [id], onDelete: SetNull)
-  
-  asignacionesCreadas Asignacion[] @relation("AsignacionesCreadas")
-  auditorias    Auditoria[]
-  preferencias  UserPreferencias?
-  sessions      Session[]
-  accounts      Account[]
+  recursoId String?  @unique
+  recurso   Recurso? @relation(fields: [recursoId], references: [id], onDelete: SetNull)
+
+  asignacionesCreadas Asignacion[]      @relation("AsignacionesCreadas")
+  auditorias          Auditoria[]
+  preferencias        UserPreferencias?
+  sessions            Session[]
+  accounts            Account[]
 
   @@index([rol, activo])
   @@map("users")
@@ -520,11 +544,11 @@ model Session {
 }
 
 model Account {
-  id                    String   @id
+  id                    String    @id
   accountId             String
   providerId            String
   userId                String
-  user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   accessToken           String?
   refreshToken          String?
   idToken               String?
@@ -532,8 +556,8 @@ model Account {
   refreshTokenExpiresAt DateTime?
   scope                 String?
   password              String?
-  createdAt             DateTime @default(now())
-  updatedAt             DateTime @updatedAt
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
 
   @@map("accounts")
 }
@@ -568,17 +592,17 @@ model Verification {
 // ============================================
 
 model Auditoria {
-  id          String   @id @default(cuid())
-  userId      String
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  accion      String   // CREATE, UPDATE, DELETE, DRAG_DROP, BULK_UPDATE
-  entidad     String   // Asignacion, Proyecto, Recurso, etc.
-  entidadId   String
-  antes       String?  // JSON string (SQLite no soporta Json nativo)
-  despues     String?  // JSON string
-  ip          String?
-  userAgent   String?
-  createdAt   DateTime @default(now())
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accion    String // CREATE, UPDATE, DELETE, DRAG_DROP, BULK_UPDATE
+  entidad   String // Asignacion, Proyecto, Recurso, etc.
+  entidadId String
+  antes     String? // JSON string (SQLite no soporta Json nativo)
+  despues   String? // JSON string
+  ip        String?
+  userAgent String?
+  createdAt DateTime @default(now())
 
   @@index([entidad, entidadId])
   @@index([userId, createdAt])

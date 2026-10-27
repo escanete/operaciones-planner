@@ -6,6 +6,7 @@ import { ProyectosAdmin } from '@/components/admin/ProyectosAdmin';
 import { ClientesAdmin } from '@/components/admin/ClientesAdmin';
 import { CatalogosAdmin } from '@/components/admin/CatalogosAdmin';
 import { EtiquetasAdmin } from '@/components/admin/EtiquetasAdmin';
+import { MaterialesCatalogoAdmin } from '@/components/admin/MaterialesCatalogoAdmin';
 import { UsuariosAdmin } from '@/components/admin/UsuariosAdmin';
 import { AuditoriaAdmin } from '@/components/admin/AuditoriaAdmin';
 
@@ -29,6 +30,7 @@ export function AdminPage() {
           <TabsTrigger value="proyectos">Proyectos</TabsTrigger>
           <TabsTrigger value="clientes">Clientes</TabsTrigger>
           <TabsTrigger value="etiquetas">Etiquetas</TabsTrigger>
+          <TabsTrigger value="materiales">Materiales</TabsTrigger>
           <TabsTrigger value="catalogos">Catálogos</TabsTrigger>
           {isSuperAdmin && <TabsTrigger value="usuarios">Usuarios</TabsTrigger>}
           {(isSuperAdmin || user?.rol === 'ADMIN_DEPTO') && (
@@ -47,6 +49,9 @@ export function AdminPage() {
         </TabsContent>
         <TabsContent value="etiquetas" className="mt-4">
           <EtiquetasAdmin />
+        </TabsContent>
+        <TabsContent value="materiales" className="mt-4">
+          <MaterialesCatalogoAdmin />
         </TabsContent>
         <TabsContent value="catalogos" className="mt-4">
           <CatalogosAdmin />

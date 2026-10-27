@@ -57,6 +57,7 @@ import {
   useCreateMaterial,
   useUpdateMaterial,
   useDeleteMaterial,
+  useMaterialesCatalogo,
   useProjectGantt,
   useUpdateProyectoAvance,
 } from '@/hooks/useApi';
@@ -1243,7 +1244,18 @@ function MaterialesTab({ proyectoId, canManage }: { proyectoId: string; canManag
                 className="group grid items-center gap-2 px-3 py-2 hover:bg-accent/30 md:grid-cols-[1fr_120px_90px_110px_80px]"
               >
                 <div className="min-w-0">
-                  <p className="truncate text-sm font-medium">{m.nombre}</p>
+                  <p className="truncate text-sm font-medium">
+                    {m.nombre}
+                    {m.catalogoId && (
+                      <Badge
+                        variant="outline"
+                        className="ml-1.5 px-1.5 py-0 text-[9px] text-muted-foreground"
+                        title={`Ítem del catálogo: ${m.catalogo?.nombre ?? ''}`}
+                      >
+                        catálogo
+                      </Badge>
+                    )}
+                  </p>
                   {m.descripcion && (
                     <p className="truncate text-xs text-muted-foreground" title={m.descripcion}>
                       {m.descripcion}
@@ -1318,6 +1330,7 @@ function MaterialDialog({
 }) {
   const createMaterial = useCreateMaterial(proyectoId);
   const updateMaterial = useUpdateMaterial(proyectoId);
+  const { data: catalogoMateriales } = useMaterialesCatalogo(true);
   const isEdit = !!material;
 
   const [nombre, setNombre] = useState(material?.nombre ?? '');
@@ -1327,8 +1340,20 @@ function MaterialDialog({
   const [estado, setEstado] = useState<MaterialEstado>(material?.estado ?? 'PENDIENTE');
   const [descripcion, setDescripcion] = useState(material?.descripcion ?? '');
   const [notas, setNotas] = useState(material?.notas ?? '');
+  const [catalogoId, setCatalogoId] = useState<string>(material?.catalogoId ?? 'none');
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+
+  // Al elegir un ítem del catálogo se precargan nombre/categoría/unidad
+  const handlePickCatalogo = (id: string) => {
+    setCatalogoId(id);
+    if (id === 'none') return;
+    const item = (catalogoMateriales ?? []).find((c) => c.id === id);
+    if (!item) return;
+    setNombre(item.nombre);
+    if (item.categoria) setCategoria(item.categoria);
+    if (item.unidadBase) setUnidad(item.unidadBase);
+  };
 
   const handleSubmit = async () => {
     setError(null);
@@ -1351,6 +1376,7 @@ function MaterialDialog({
         estado,
         descripcion: descripcion || undefined,
         notas: notas || undefined,
+        catalogoId: catalogoId !== 'none' ? catalogoId : undefined,
       };
       if (isEdit && material) {
         await updateMaterial.mutateAsync({ id: material.id, data: payload });
@@ -1377,6 +1403,33 @@ function MaterialDialog({
         </DialogHeader>
 
         <div className="grid gap-4 py-2">
+          {/* Elegir del catálogo global (opcional): precarga los campos */}
+          {(catalogoMateriales ?? []).length > 0 && (
+            <div className="space-y-2">
+              <Label>Elegir del catálogo de materiales (opcional)</Label>
+              <Select value={catalogoId} onValueChange={handlePickCatalogo}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Material libre (escribir a mano)" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">
+                    <span className="text-muted-foreground">Material libre (sin catálogo)</span>
+                  </SelectItem>
+                  {(catalogoMateriales ?? []).map((c) => (
+                    <SelectItem key={c.id} value={c.id}>
+                      {c.nombre}
+                      {c.categoria ? ` · ${c.categoria}` : ''}
+                      {c.unidadBase ? ` (${c.unidadBase})` : ''}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Al elegir un ítem se completan nombre, categoría y unidad (editables)
+              </p>
+            </div>
+          )}
+
           <div className="space-y-2">
             <Label htmlFor="mat-nombre">
               Nombre <span className="text-destructive">*</span>

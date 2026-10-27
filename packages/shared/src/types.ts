@@ -497,6 +497,20 @@ export interface ProyectoWBSResponse {
 
 export type MaterialEstado = 'PENDIENTE' | 'SOLICITADO' | 'ENTREGADO' | 'INSTALADO' | 'DEVUELTO';
 
+// Ítem del catálogo global de materiales (Admin): definición reutilizable
+// con unidad base y vínculo opcional a un recurso-herramienta del sistema.
+export interface MaterialCatalogo {
+  id: string;
+  nombre: string;
+  categoria?: string;
+  unidadBase?: string;
+  descripcion?: string;
+  recursoId?: string; // vínculo con inventario (recurso HERRAMIENTA/EQUIPO_TECNICO)
+  activo: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
 export interface Material {
   id: string;
   proyectoId: string;
@@ -507,6 +521,8 @@ export interface Material {
   unidad?: string;
   estado: MaterialEstado;
   recursoId?: string; // vínculo con activo del catálogo (inventario futuro)
+  catalogoId?: string; // ítem del catálogo global del que proviene (opcional)
+  catalogo?: MaterialCatalogo | null;
   notas?: string;
   creadoPorId?: string;
   createdAt: Date;

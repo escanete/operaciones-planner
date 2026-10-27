@@ -5,7 +5,7 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { useDepartamentos, useEquipos, useProyectos, useTiposActividad, useRecursos } from '@/hooks/useApi';
+import { useDepartamentos, useEquipos, useProyectos, useTiposActividad, useRecursos, useEtiquetas } from '@/hooks/useApi';
 import { ChevronsUpDown, X } from 'lucide-react';
 
 // Filtro multi-selección: guarda los ids como string separado por comas
@@ -98,6 +98,8 @@ export function Sidebar() {
   // Todos los recursos activos (personas + vehículos/equipos técnicos),
   // para poder filtrar también por camioneta en la vista de recursos
   const { data: recursos } = useRecursos({ activo: true });
+  // Etiquetas (solo activas) — filtran la Vista Proyecto (Gantt)
+  const { data: etiquetas } = useEtiquetas(true);
 
   // Cerrado: no renderizar nada. Se reabre desde el botón "Filtros"
   // del toolbar de Planificación (evitaba solaparse con la flecha del período).
@@ -172,6 +174,20 @@ export function Sidebar() {
           selected={toIds(filters.recursoId)}
           onChange={(ids) => setFilters({ recursoId: ids.length ? ids.join(',') : undefined })}
         />
+
+        {(etiquetas ?? []).length > 0 && (
+          <MultiSelectFilter
+            label="Etiqueta (Vista Proyecto)"
+            options={(etiquetas ?? []).map((e) => ({
+              id: e.id,
+              label: e.nombre,
+            }))}
+            selected={toIds(filters.etiquetaId)}
+            onChange={(ids) =>
+              setFilters({ etiquetaId: ids.length ? ids.join(',') : undefined })
+            }
+          />
+        )}
 
         <div className="flex gap-2 pt-2">
           <Button

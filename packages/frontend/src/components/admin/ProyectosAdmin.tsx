@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { EntityDialog, type FieldConfig } from './EntityDialog';
+import { EtiquetaChips } from '@/components/etiquetas';
 import {
   useProyectos,
   useClientes,
@@ -79,6 +80,12 @@ export function ProyectosAdmin() {
       helperText: 'Define la jerarquía de proyectos (vista Gantt)',
     },
     { name: 'color', label: 'Color (hex)', type: 'color', defaultValue: '#00B050' },
+    {
+      name: 'etiquetas',
+      label: 'Etiquetas',
+      type: 'etiquetas',
+      helperText: 'Categorías visuales (se gestionan en Admin → Etiquetas)',
+    },
   ];
 
   return (
@@ -114,9 +121,14 @@ export function ProyectosAdmin() {
                   <TableCell>
                     <div className="flex items-center gap-2">
                       <div className="h-3 w-3 rounded-full" style={{ backgroundColor: p.color ?? '#888' }} />
-                      <div>
+                      <div className="min-w-0">
                         <div className="font-medium">{p.nombre}</div>
-                        {p.codigo && <div className="text-xs text-muted-foreground">{p.codigo}</div>}
+                        <div className="flex items-center gap-1">
+                          {p.codigo && <div className="text-xs text-muted-foreground">{p.codigo}</div>}
+                          {p.etiquetas && p.etiquetas.length > 0 && (
+                            <EtiquetaChips size="xs" etiquetas={p.etiquetas} />
+                          )}
+                        </div>
                       </div>
                     </div>
                   </TableCell>

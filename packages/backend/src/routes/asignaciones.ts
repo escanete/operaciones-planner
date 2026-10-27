@@ -29,6 +29,7 @@ const asignacionSchema = z.object({
   estado: z.enum(['BORRADOR', 'CONFIRMADA', 'EN_CURSO', 'COMPLETADA', 'CANCELADA', 'CONFLICTO']).default('CONFIRMADA'),
   prioridad: z.number().int().min(0).default(0),
   notas: z.string().optional(),
+  etiquetaIds: z.array(z.string()).optional(), // etiquetas (estilo Zoho)
 });
 
 // Verifica que los vínculos WBS pertenezcan al mismo proyecto
@@ -58,6 +59,19 @@ async function validarWbsLinks(
     if (!sub || sub.tarea.actividad.proyectoId !== proyectoId) return 'La subtarea vinculada no pertenece al proyecto';
   }
   return null;
+}
+
+// Sincroniza las etiquetas de una asignación (reemplazo completo)
+async function setEtiquetasAsignacion(asignacionId: string, etiquetaIds: string[]): Promise<void> {
+  await prisma.asignacionEtiqueta.deleteMany({ where: { asignacionId } });
+  const unicos = [...new Set(etiquetaIds)];
+  if (unicos.length === 0) return;
+  const validas = await prisma.etiqueta.findMany({
+    where: { id: { in: unicos } },
+    select: { id: true },
+  });
+  const data = validas.map((e) => ({ asignacionId, etiquetaId: e.id }));
+  if (data.length > 0) await prisma.asignacionEtiqueta.createMany({ data });
 }
 
 const moverSchema = z.object({
@@ -120,13 +134,21 @@ asignacionesRoutes.get('/:id', async (c) => {
       recurso: { include: { departamento: true, equipo: true, cargo: true } },
       tipoActividad: true,
       camioneta: true,
+      etiquetas: { include: { etiqueta: true } },
     },
   });
 
   if (!asignacion) {
     return c.json({ error: 'Asignación no encontrada' }, 404);
   }
-  return c.json(asignacion);
+  return c.json({
+    ...asignacion,
+    etiquetas: asignacion.etiquetas.map((e) => ({
+      id: e.etiqueta.id,
+      nombre: e.etiqueta.nombre,
+      color: e.etiqueta.color,
+    })),
+  });
 });
 
 asignacionesRoutes.post('/', async (c) => {
@@ -136,7 +158,7 @@ asignacionesRoutes.post('/', async (c) => {
   }
 
   const body = await c.req.json();
-  const validated = asignacionSchema.parse(body);
+  const { etiquetaIds, ...validated } = asignacionSchema.parse(body);
 
   const errWbs = await validarWbsLinks(validated.proyectoId, validated);
   if (errWbs) {
@@ -170,10 +192,25 @@ asignacionesRoutes.post('/', async (c) => {
       recurso: true,
       tipoActividad: true,
       camioneta: true,
+      etiquetas: { include: { etiqueta: true } },
     },
   });
 
-  return c.json(asignacion, 201);
+  if (etiquetaIds && etiquetaIds.length > 0) {
+    await setEtiquetasAsignacion(asignacion.id, etiquetaIds);
+  }
+
+  return c.json(
+    {
+      ...asignacion,
+      etiquetas: asignacion.etiquetas.map((e) => ({
+        id: e.etiqueta.id,
+        nombre: e.etiqueta.nombre,
+        color: e.etiqueta.color,
+      })),
+    },
+    201
+  );
 });
 
 asignacionesRoutes.post('/bulk', async (c) => {
@@ -215,7 +252,7 @@ asignacionesRoutes.put('/:id', async (c) => {
 
   const { id } = c.req.param();
   const body = await c.req.json() as Record<string, unknown>;
-  const { version, ...rest } = body;
+  const { version, etiquetaIds, ...rest } = body;
   const validated = asignacionSchema.partial().parse(rest);
 
   if (version === undefined || typeof version !== 'number') {
@@ -254,10 +291,22 @@ asignacionesRoutes.put('/:id', async (c) => {
       recurso: true,
       tipoActividad: true,
       camioneta: true,
+      etiquetas: { include: { etiqueta: true } },
     },
   });
 
-  return c.json(asignacion);
+  if (Array.isArray(etiquetaIds)) {
+    await setEtiquetasAsignacion(id, etiquetaIds as string[]);
+  }
+
+  return c.json({
+    ...asignacion,
+    etiquetas: asignacion.etiquetas.map((e) => ({
+      id: e.etiqueta.id,
+      nombre: e.etiqueta.nombre,
+      color: e.etiqueta.color,
+    })),
+  });
 });
 
 asignacionesRoutes.patch('/:id/mover', async (c) => {

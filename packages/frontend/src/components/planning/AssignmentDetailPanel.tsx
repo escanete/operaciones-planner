@@ -20,6 +20,7 @@ import { api } from '@/services/api';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
+import { EtiquetaChips } from '@/components/etiquetas';
 import { getContrastColor, getRoleLevelLabel } from '@operaciones-planner/shared';
 import type { Asignacion, Proyecto } from '@operaciones-planner/shared';
 
@@ -149,6 +150,12 @@ export function AssignmentDetailPanel({ assignmentId, onClose, onEdit }: Assignm
               )}
               {asignacion.proyecto?.cliente && (
                 <p className="text-sm opacity-90 mt-1">{asignacion.proyecto.cliente.nombre}</p>
+              )}
+              {/* Etiquetas (estilo Zoho) */}
+              {asignacion.etiquetas && asignacion.etiquetas.length > 0 && (
+                <div className="mt-2">
+                  <EtiquetaChips etiquetas={asignacion.etiquetas} />
+                </div>
               )}
               {/* Avance del proyecto (decisión c) */}
               {asignacion.proyecto?.percentComplete !== undefined &&

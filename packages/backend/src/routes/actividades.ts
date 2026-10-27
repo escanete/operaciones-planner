@@ -123,6 +123,7 @@ const actividadSchema = z.object({
   fechaInicio: z.string().optional().nullable(),
   fechaFin: z.string().optional().nullable(),
   relevante: z.boolean().optional().default(false),
+  etiquetaIds: z.array(z.string()).optional().default([]),
 });
 
 const tareaSchema = z.object({
@@ -133,6 +134,7 @@ const tareaSchema = z.object({
   fechaFin: z.string().optional().nullable(),
   relevante: z.boolean().optional().default(false),
   asignados: z.array(z.string()).optional().default([]), // recursoIds
+  etiquetaIds: z.array(z.string()).optional().default([]),
 });
 
 const tareaUpdateSchema = tareaSchema.partial().extend({
@@ -145,10 +147,51 @@ const subtareaSchema = z.object({
   orden: z.number().int().default(0),
   completada: z.boolean().optional().default(false),
   relevante: z.boolean().optional().default(false),
+  etiquetaIds: z.array(z.string()).optional().default([]),
 });
 
 function toNullableDate(s: string | null | undefined): Date | null {
   return s ? new Date(s) : null;
+}
+
+// Sincroniza las etiquetas de un nodo WBS (reemplazo completo)
+type NodoEtiquetado = 'actividad' | 'tarea' | 'subtarea';
+
+async function setEtiquetasWBS(
+  tipo: NodoEtiquetado,
+  id: string,
+  etiquetaIds: string[]
+): Promise<void> {
+  // Validar que las etiquetas existan (ignora ids borrados a mitad de edición)
+  const unicos = [...new Set(etiquetaIds)];
+  const validas =
+    unicos.length > 0
+      ? await prisma.etiqueta.findMany({ where: { id: { in: unicos } }, select: { id: true } })
+      : [];
+  const idsValidos = validas.map((e) => e.id);
+
+  if (tipo === 'actividad') {
+    await prisma.actividadEtiqueta.deleteMany({ where: { actividadId: id } });
+    if (idsValidos.length > 0) {
+      await prisma.actividadEtiqueta.createMany({
+        data: idsValidos.map((etiquetaId) => ({ actividadId: id, etiquetaId })),
+      });
+    }
+  } else if (tipo === 'tarea') {
+    await prisma.tareaEtiqueta.deleteMany({ where: { tareaId: id } });
+    if (idsValidos.length > 0) {
+      await prisma.tareaEtiqueta.createMany({
+        data: idsValidos.map((etiquetaId) => ({ tareaId: id, etiquetaId })),
+      });
+    }
+  } else {
+    await prisma.subtareaEtiqueta.deleteMany({ where: { subtareaId: id } });
+    if (idsValidos.length > 0) {
+      await prisma.subtareaEtiqueta.createMany({
+        data: idsValidos.map((etiquetaId) => ({ subtareaId: id, etiquetaId })),
+      });
+    }
+  }
 }
 
 // ============================================
@@ -171,6 +214,7 @@ actividadesRoutes.get('/proyecto/:proyectoId', async (c) => {
       fechaFin: true,
       scheduledStart: true,
       scheduledEnd: true,
+      etiquetas: { include: { etiqueta: true } },
     },
   });
   if (!proyecto) return c.json({ error: 'Proyecto no encontrado' }, 404);
@@ -179,9 +223,14 @@ actividadesRoutes.get('/proyecto/:proyectoId', async (c) => {
     prisma.actividad.findMany({
       where: { proyectoId },
       include: {
+        etiquetas: { include: { etiqueta: true } },
         tareas: {
           include: {
-            subtareas: { orderBy: { orden: 'asc' } },
+            etiquetas: { include: { etiqueta: true } },
+            subtareas: {
+              orderBy: { orden: 'asc' },
+              include: { etiquetas: { include: { etiqueta: true } } },
+            },
             asignados: {
               include: { recurso: { select: { id: true, nombre: true, apellido: true } } },
             },
@@ -234,11 +283,18 @@ actividadesRoutes.get('/proyecto/:proyectoId', async (c) => {
     }
   }
 
+  // Aplanar uniones de etiquetas al shape compartido EtiquetaRef
+  const toEtiquetaRefs = (
+    links: Array<{ etiqueta: { id: string; nombre: string; color: string } }>
+  ) => links.map((l) => ({ id: l.etiqueta.id, nombre: l.etiqueta.nombre, color: l.etiqueta.color }));
+
   const actividadesOut = actividades.map((a) => ({
     ...a,
+    etiquetas: toEtiquetaRefs(a.etiquetas),
     asignaciones: porActividad.get(a.id) ?? [],
     tareas: a.tareas.map((t) => ({
       ...t,
+      etiquetas: toEtiquetaRefs(t.etiquetas),
       asignaciones: porTarea.get(t.id) ?? [],
       // Aplanar asignados al shape del tipo compartido TareaAsignado
       asignados: (t.asignados ?? []).map((ta) => ({
@@ -249,6 +305,7 @@ actividadesRoutes.get('/proyecto/:proyectoId', async (c) => {
       })),
       subtareas: t.subtareas.map((s) => ({
         ...s,
+        etiquetas: toEtiquetaRefs(s.etiquetas),
         asignaciones: porSubtarea.get(s.id) ?? [],
       })),
     })),
@@ -270,6 +327,7 @@ actividadesRoutes.get('/proyecto/:proyectoId', async (c) => {
       fechaFin: proyecto.fechaFin ?? undefined,
       scheduledStart: proyecto.scheduledStart ?? undefined,
       scheduledEnd: proyecto.scheduledEnd ?? undefined,
+      etiquetas: toEtiquetaRefs(proyecto.etiquetas),
     },
     actividades: actividadesOut as unknown as Actividad[],
     asignaciones: aNivelProyecto,
@@ -310,6 +368,10 @@ actividadesRoutes.post('/', async (c) => {
     },
   });
 
+  if (data.etiquetaIds.length > 0) {
+    await setEtiquetasWBS('actividad', actividad.id, data.etiquetaIds);
+  }
+
   await recalcFromProyecto(data.proyectoId);
   return c.json(actividad, 201);
 });
@@ -335,6 +397,10 @@ actividadesRoutes.put('/:id', async (c) => {
       ...(data.relevante !== undefined ? { relevante: data.relevante } : {}),
     },
   });
+
+  if (data.etiquetaIds !== undefined) {
+    await setEtiquetasWBS('actividad', id, data.etiquetaIds);
+  }
 
   await recalcFromActividad(id);
   return c.json(actividad);
@@ -395,10 +461,17 @@ actividadesRoutes.post('/:id/tareas', async (c) => {
     await setAsignados(tarea.id, data.asignados);
   }
 
+  if (data.etiquetaIds.length > 0) {
+    await setEtiquetasWBS('tarea', tarea.id, data.etiquetaIds);
+  }
+
   await recalcFromTarea(tarea.id);
   const final = await prisma.tarea.findUnique({
     where: { id: tarea.id },
-    include: { asignados: { include: { recurso: { select: { id: true, nombre: true, apellido: true } } } } },
+    include: {
+      asignados: { include: { recurso: { select: { id: true, nombre: true, apellido: true } } } },
+      etiquetas: { include: { etiqueta: true } },
+    },
   });
   return c.json(final, 201);
 });
@@ -439,11 +512,18 @@ actividadesRoutes.put('/tarea/:id', async (c) => {
     await setAsignados(id, data.asignados);
   }
 
+  if (data.etiquetaIds !== undefined) {
+    await setEtiquetasWBS('tarea', id, data.etiquetaIds);
+  }
+
   await recalcFromTarea(id);
 
   const tarea = await prisma.tarea.findUnique({
     where: { id },
-    include: { asignados: { include: { recurso: { select: { id: true, nombre: true, apellido: true } } } } },
+    include: {
+      asignados: { include: { recurso: { select: { id: true, nombre: true, apellido: true } } } },
+      etiquetas: { include: { etiqueta: true } },
+    },
   });
   return c.json(tarea);
 });
@@ -491,6 +571,10 @@ actividadesRoutes.post('/tarea/:id/subtareas', async (c) => {
     },
   });
 
+  if (data.etiquetaIds.length > 0) {
+    await setEtiquetasWBS('subtarea', subtarea.id, data.etiquetaIds);
+  }
+
   await recalcFromTarea(id);
   return c.json(subtarea, 201);
 });
@@ -522,6 +606,10 @@ actividadesRoutes.put('/subtarea/:id', async (c) => {
       ...(data.relevante !== undefined ? { relevante: data.relevante } : {}),
     },
   });
+
+  if (data.etiquetaIds !== undefined) {
+    await setEtiquetasWBS('subtarea', id, data.etiquetaIds);
+  }
 
   await recalcFromTarea(subtarea.tareaId);
   return c.json(updated);

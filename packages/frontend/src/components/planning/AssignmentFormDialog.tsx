@@ -23,6 +23,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { AlertCircle, Calendar, Loader2, MapPin, Truck, Users } from 'lucide-react';
 import { useProyectos, useRecursos, useTiposActividad, useDepartamentos, useProyectoWBS } from '@/hooks/useApi';
+import { EtiquetaSelector } from '@/components/etiquetas';
 import { api, ApiError } from '@/services/api';
 import { cn } from '@/lib/utils';
 import { getRoleLevelLabel } from '@operaciones-planner/shared';
@@ -66,6 +67,8 @@ export function AssignmentFormDialog({
   const [alojamiento, setAlojamiento] = useState(false);
   const [notas, setNotas] = useState('');
   const [estado, setEstado] = useState('CONFIRMADA');
+  // Etiquetas (estilo Zoho) de la actividad de planificación
+  const [etiquetaIds, setEtiquetaIds] = useState<string[]>([]);
 
   // Jerarquía y filtros (decisiones b y e)
   const [filtroDepartamento, setFiltroDepartamento] = useState('__all__');
@@ -151,6 +154,9 @@ export function AssignmentFormDialog({
         setAlojamiento(asignacion.alojamiento);
         setNotas(asignacion.notas ?? '');
         setEstado(asignacion.estado);
+        setEtiquetaIds(
+          (asignacion.etiquetas ?? []).map((e) => (typeof e === 'string' ? e : e.id))
+        );
       } else {
         // Defaults para nueva asignación
         setProyectoId(proyectosDisponibles?.[0]?.id ?? '');
@@ -171,6 +177,7 @@ export function AssignmentFormDialog({
         setAlojamiento(false);
         setNotas('');
         setEstado('CONFIRMADA');
+        setEtiquetaIds([]);
       }
       setError(null);
       setConflictos([]);
@@ -216,6 +223,7 @@ export function AssignmentFormDialog({
         alojamiento,
         notas: notas || undefined,
         estado,
+        etiquetaIds,
         forzar,
       };
 
@@ -649,6 +657,12 @@ export function AssignmentFormDialog({
                 </label>
               </div>
             </div>
+          </div>
+
+          {/* Etiquetas (estilo Zoho) */}
+          <div className="space-y-2">
+            <Label>Etiquetas ({etiquetaIds.length})</Label>
+            <EtiquetaSelector value={etiquetaIds} onChange={setEtiquetaIds} />
           </div>
 
           {/* Notas */}

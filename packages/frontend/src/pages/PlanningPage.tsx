@@ -72,6 +72,7 @@ export function PlanningPage() {
     fechaFin: format(end, 'yyyy-MM-dd'),
     proyectoId: filters.proyectoId,
     recursoId: filters.recursoId,
+    etiquetaId: filters.etiquetaId,
   });
   const updateAvance = useUpdateProyectoAvance();
 

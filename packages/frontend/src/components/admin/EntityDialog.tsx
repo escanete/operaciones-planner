@@ -14,8 +14,18 @@ import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Loader2 } from 'lucide-react';
+import { EtiquetaSelector } from '@/components/etiquetas';
 
-export type FieldType = 'text' | 'email' | 'number' | 'select' | 'textarea' | 'checkbox' | 'color' | 'date';
+export type FieldType =
+  | 'text'
+  | 'email'
+  | 'number'
+  | 'select'
+  | 'textarea'
+  | 'checkbox'
+  | 'color'
+  | 'date'
+  | 'etiquetas';
 
 export interface FieldConfig {
   name: string;
@@ -59,6 +69,14 @@ export function EntityDialog({
     if (open) {
       const initial: Record<string, unknown> = {};
       fields.forEach((field) => {
+        if (field.type === 'etiquetas') {
+          // Normaliza: EtiquetaRef[] | string[] → string[] (ids)
+          const raw = initialData?.[field.name];
+          initial[field.name] = Array.isArray(raw)
+            ? raw.map((v) => (typeof v === 'string' ? v : (v as { id: string }).id))
+            : [];
+          return;
+        }
         if (initialData && initialData[field.name] !== undefined && initialData[field.name] !== null) {
           initial[field.name] = initialData[field.name];
         } else if (field.defaultValue !== undefined) {
@@ -86,22 +104,28 @@ export function EntityDialog({
       }
     }
 
-    setIsSubmitting(true);
-    try {
-      // Limpiar valores vacíos y convertir __none__ a undefined
-      const cleaned: Record<string, unknown> = {};
-      Object.entries(formData).forEach(([key, value]) => {
-        if (value === NONE || value === '') {
-          cleaned[key] = undefined;
-          return;
-        }
-        const field = fields.find((f) => f.name === key);
-        if (field?.type === 'number' && value !== '') {
-          cleaned[key] = Number(value);
-        } else {
-          cleaned[key] = value;
-        }
-      });
+      setIsSubmitting(true);
+      try {
+        // Limpiar valores vacíos y convertir __none__ a undefined
+        const cleaned: Record<string, unknown> = {};
+        Object.entries(formData).forEach(([key, value]) => {
+          const field = fields.find((f) => f.name === key);
+          // El selector de etiquetas envía sus ids bajo la key "etiquetaIds"
+          // (la que esperan los endpoints del backend)
+          if (field?.type === 'etiquetas') {
+            cleaned.etiquetaIds = Array.isArray(value) ? value : [];
+            return;
+          }
+          if (value === NONE || value === '') {
+            cleaned[key] = undefined;
+            return;
+          }
+          if (field?.type === 'number' && value !== '') {
+            cleaned[key] = Number(value);
+          } else {
+            cleaned[key] = value;
+          }
+        });
 
       await onSubmit(cleaned);
       onOpenChange(false);
@@ -162,6 +186,11 @@ export function EntityDialog({
                         ))}
                       </SelectContent>
                     </Select>
+                  ) : field.type === 'etiquetas' ? (
+                    <EtiquetaSelector
+                      value={(formData[field.name] as string[]) ?? []}
+                      onChange={(ids) => setFormData((prev) => ({ ...prev, [field.name]: ids }))}
+                    />
                   ) : field.type === 'textarea' ? (
                     <Textarea
                       id={field.name}

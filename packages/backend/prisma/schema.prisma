@@ -123,10 +123,86 @@ model Proyecto {
 
   materiales       Material[]
 
+  etiquetas        ProyectoEtiqueta[]
+
   @@index([clienteId])
   @@index([estado])
   @@index([subprojectId])
   @@map("proyectos")
+}
+
+// ============================================
+// ETIQUETAS (estilo Zoho) — catálogo global
+// Se aplican a proyectos, actividades WBS, tareas,
+// subtareas y actividades de planificación (asignaciones)
+// ============================================
+
+model Etiqueta {
+  id          String   @id @default(cuid())
+  nombre      String   @unique
+  color       String   @default("#64748B") // Hex para chips en UI
+  descripcion String?
+  activo      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  proyectos    ProyectoEtiqueta[]
+  actividades  ActividadEtiqueta[]
+  tareas       TareaEtiqueta[]
+  subtareas    SubtareaEtiqueta[]
+  asignaciones AsignacionEtiqueta[]
+
+  @@map("etiquetas")
+}
+
+model ProyectoEtiqueta {
+  proyectoId String
+  proyecto   Proyecto @relation(fields: [proyectoId], references: [id], onDelete: Cascade)
+  etiquetaId String
+  etiqueta   Etiqueta @relation(fields: [etiquetaId], references: [id], onDelete: Cascade)
+
+  @@id([proyectoId, etiquetaId])
+  @@map("proyecto_etiquetas")
+}
+
+model ActividadEtiqueta {
+  actividadId String
+  actividad   Actividad @relation(fields: [actividadId], references: [id], onDelete: Cascade)
+  etiquetaId  String
+  etiqueta    Etiqueta  @relation(fields: [etiquetaId], references: [id], onDelete: Cascade)
+
+  @@id([actividadId, etiquetaId])
+  @@map("actividad_etiquetas")
+}
+
+model TareaEtiqueta {
+  tareaId   String
+  tarea     Tarea   @relation(fields: [tareaId], references: [id], onDelete: Cascade)
+  etiquetaId String
+  etiqueta  Etiqueta @relation(fields: [etiquetaId], references: [id], onDelete: Cascade)
+
+  @@id([tareaId, etiquetaId])
+  @@map("tarea_etiquetas")
+}
+
+model SubtareaEtiqueta {
+  subtareaId String
+  subtarea   Subtarea @relation(fields: [subtareaId], references: [id], onDelete: Cascade)
+  etiquetaId String
+  etiqueta   Etiqueta  @relation(fields: [etiquetaId], references: [id], onDelete: Cascade)
+
+  @@id([subtareaId, etiquetaId])
+  @@map("subtarea_etiquetas")
+}
+
+model AsignacionEtiqueta {
+  asignacionId String
+  asignacion   Asignacion @relation(fields: [asignacionId], references: [id], onDelete: Cascade)
+  etiquetaId   String
+  etiqueta     Etiqueta  @relation(fields: [etiquetaId], references: [id], onDelete: Cascade)
+
+  @@id([asignacionId, etiquetaId])
+  @@map("asignacion_etiquetas")
 }
 
 // ============================================
@@ -297,6 +373,7 @@ model Asignacion {
   
   // Para drag & drop y conflictos (optimistic locking)
   version       Int            @default(1)
+  etiquetas     AsignacionEtiqueta[]
 
   @@index([proyectoId, fechaInicio, fechaFin])
   @@index([recursoId, fechaInicio, fechaFin])
@@ -328,6 +405,7 @@ model Actividad {
 
   tareas Tarea[]
   asignaciones Asignacion[]
+  etiquetas ActividadEtiqueta[]
 
   @@index([proyectoId])
   @@map("actividades")
@@ -352,6 +430,7 @@ model Tarea {
   subtareas Subtarea[]
   asignados TareaAsignado[]
   asignaciones Asignacion[]
+  etiquetas TareaEtiqueta[]
 
   @@index([actividadId])
   @@map("tareas")
@@ -367,6 +446,7 @@ model Subtarea {
   completada Boolean @default(false)
   relevante Boolean @default(false) // marcación manual de importancia
   asignaciones Asignacion[]
+  etiquetas SubtareaEtiqueta[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

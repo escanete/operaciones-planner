@@ -5,6 +5,7 @@ import { RecursosAdmin } from '@/components/admin/RecursosAdmin';
 import { ProyectosAdmin } from '@/components/admin/ProyectosAdmin';
 import { ClientesAdmin } from '@/components/admin/ClientesAdmin';
 import { CatalogosAdmin } from '@/components/admin/CatalogosAdmin';
+import { EtiquetasAdmin } from '@/components/admin/EtiquetasAdmin';
 import { UsuariosAdmin } from '@/components/admin/UsuariosAdmin';
 import { AuditoriaAdmin } from '@/components/admin/AuditoriaAdmin';
 
@@ -18,7 +19,7 @@ export function AdminPage() {
       <div>
         <h1 className="text-2xl font-bold">Administración</h1>
         <p className="text-sm text-muted-foreground">
-          Gestiona recursos, proyectos, clientes, catálogos y usuarios del sistema
+          Gestiona recursos, proyectos, clientes, etiquetas, catálogos y usuarios del sistema
         </p>
       </div>
 
@@ -27,6 +28,7 @@ export function AdminPage() {
           <TabsTrigger value="recursos">Recursos</TabsTrigger>
           <TabsTrigger value="proyectos">Proyectos</TabsTrigger>
           <TabsTrigger value="clientes">Clientes</TabsTrigger>
+          <TabsTrigger value="etiquetas">Etiquetas</TabsTrigger>
           <TabsTrigger value="catalogos">Catálogos</TabsTrigger>
           {isSuperAdmin && <TabsTrigger value="usuarios">Usuarios</TabsTrigger>}
           {(isSuperAdmin || user?.rol === 'ADMIN_DEPTO') && (
@@ -42,6 +44,9 @@ export function AdminPage() {
         </TabsContent>
         <TabsContent value="clientes" className="mt-4">
           <ClientesAdmin />
+        </TabsContent>
+        <TabsContent value="etiquetas" className="mt-4">
+          <EtiquetasAdmin />
         </TabsContent>
         <TabsContent value="catalogos" className="mt-4">
           <CatalogosAdmin />

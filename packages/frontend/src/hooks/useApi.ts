@@ -17,6 +17,7 @@ import type {
   Tarea,
   Subtarea,
   Material,
+  Etiqueta,
   CargaTrabajoResumen,
   OcupacionProyectoResumen,
   CargaEquipoResumen,
@@ -426,6 +427,7 @@ export function useProjectGantt(
     clienteId?: string;
     proyectoId?: string;
     recursoId?: string;
+    etiquetaId?: string;
   },
   options?: { enabled?: boolean }
 ) {
@@ -598,6 +600,50 @@ export function useDeleteMaterial(proyectoId: string) {
   return useMutation({
     mutationFn: (id: string) => api.delete(`/api/materiales/${id}`),
     onSuccess: () => invalidateMateriales(queryClient, proyectoId),
+  });
+}
+
+// ============================================
+// ETIQUETAS (catálogo global, estilo Zoho)
+// ============================================
+export function useEtiquetas(soloActivas = false) {
+  return useQuery({
+    queryKey: ['etiquetas', soloActivas],
+    queryFn: () => api.get<Etiqueta[]>(`/api/etiquetas${soloActivas ? '?activo=true' : ''}`),
+  });
+}
+
+function invalidateEtiquetas(queryClient: ReturnType<typeof useQueryClient>) {
+  // Las etiquetas se muestran en el árbol WBS, Gantt y proyectos
+  queryClient.invalidateQueries({ queryKey: ['etiquetas'] });
+  queryClient.invalidateQueries({ queryKey: ['proyecto-wbs'] });
+  queryClient.invalidateQueries({ queryKey: ['project-gantt'] });
+  queryClient.invalidateQueries({ queryKey: ['proyectos'] });
+  queryClient.invalidateQueries({ queryKey: ['asignaciones'] });
+}
+
+export function useCreateEtiqueta() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (data: Record<string, unknown>) => api.post<Etiqueta>('/api/etiquetas', data),
+    onSuccess: () => invalidateEtiquetas(queryClient),
+  });
+}
+
+export function useUpdateEtiqueta() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, data }: { id: string; data: Record<string, unknown> }) =>
+      api.put<Etiqueta>(`/api/etiquetas/${id}`, data),
+    onSuccess: () => invalidateEtiquetas(queryClient),
+  });
+}
+
+export function useDeleteEtiqueta() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.delete(`/api/etiquetas/${id}`),
+    onSuccess: () => invalidateEtiquetas(queryClient),
   });
 }
 

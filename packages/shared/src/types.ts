@@ -103,6 +103,7 @@ export interface Proyecto {
   subprojectId?: string;
   dependencies?: string; // JSON string con IDs de predecesores
   relevante: boolean; // marcación manual de importancia (reemplaza ruta crítica automática)
+  etiquetas?: EtiquetaRef[];
 }
 
 // ============================================
@@ -207,6 +208,30 @@ export interface Asignacion {
   creadoAt: Date;
   actualizadoAt: Date;
   version: number;
+
+  // Etiquetas (estilo Zoho)
+  etiquetas?: EtiquetaRef[];
+}
+
+// ============================================
+// ETIQUETAS (catálogo global, estilo Zoho)
+// ============================================
+
+export interface Etiqueta {
+  id: string;
+  nombre: string;
+  color: string; // hex "#64748B"
+  descripcion?: string;
+  activo: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+/** Etiqueta embebida en entidades (respuesta WBS/gantt/asignaciones) */
+export interface EtiquetaRef {
+  id: string;
+  nombre: string;
+  color: string;
 }
 
 // ============================================
@@ -379,6 +404,7 @@ export interface Subtarea {
   orden: number;
   completada: boolean; // checkbox 0/100
   relevante: boolean;
+  etiquetas?: EtiquetaRef[];
   asignaciones?: AsignacionResumen[];
   createdAt: Date;
   updatedAt: Date;
@@ -414,6 +440,7 @@ export interface Tarea {
   completada: boolean; // checkbox directo si no tiene subtareas
   percentComplete: number; // roll-up de subtareas o 0/100
   relevante: boolean;
+  etiquetas?: EtiquetaRef[];
   subtareas?: Subtarea[];
   asignados?: TareaAsignado[];
   asignaciones?: AsignacionResumen[];
@@ -431,6 +458,7 @@ export interface Actividad {
   fechaFin?: Date;
   percentComplete: number; // promedio automático de tareas
   relevante: boolean;
+  etiquetas?: EtiquetaRef[];
   tareas?: Tarea[];
   asignaciones?: AsignacionResumen[];
   createdAt: Date;
@@ -449,6 +477,7 @@ export interface ProyectoWBSResponse {
     fechaFin?: Date;
     scheduledStart?: Date;
     scheduledEnd?: Date;
+    etiquetas?: EtiquetaRef[];
   };
   actividades: Actividad[];
   // Asignaciones de planificación sin vínculo WBS (cuelgan directo del proyecto)
@@ -529,6 +558,7 @@ export interface GanttTaskItem {
   notas?: string; // comentarios: descripción del proyecto o notas de la asignación
   estado?: ProyectoEstado | AsignacionEstado; // estado del proyecto o de la asignación
   esCritica: boolean; // ruta crítica calculada
+  etiquetas?: EtiquetaRef[]; // etiquetas del nodo (filtro por etiqueta en Gantt)
 }
 
 export interface ProjectGanttResponse {
@@ -556,6 +586,7 @@ export interface PlanningFilters {
   region?: string;
   camionetaId?: string;
   areaId?: string;
+  etiquetaId?: string; // filtro por etiqueta (aplica a la Vista Proyecto/Gantt)
   soloConflictos?: boolean;
   soloSinAsignar?: boolean;
 }

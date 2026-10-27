@@ -362,12 +362,14 @@ planningRoutes.get('/gantt', async (c) => {
       include: {
         cliente: { select: { nombre: true } },
         subproyectos: { select: { id: true } },
+        etiquetas: { include: { etiqueta: true } },
         asignaciones: {
           where: whereAsignacionGantt,
           include: {
             recurso: { select: { nombre: true, apellido: true } },
             tipoActividad: { select: { nombre: true, color: true } },
             subtarea: { select: { tareaId: true } },
+            etiquetas: { include: { etiqueta: true } },
           },
           orderBy: { fechaInicio: 'asc' },
         },
@@ -383,9 +385,11 @@ planningRoutes.get('/gantt', async (c) => {
       ? await prisma.actividad.findMany({
           where: { proyectoId: { in: proyectoIds } },
           include: {
+            etiquetas: { include: { etiqueta: true } },
             tareas: {
               orderBy: { orden: 'asc' },
               include: {
+                etiquetas: { include: { etiqueta: true } },
                 asignados: {
                   include: { recurso: { select: { nombre: true, apellido: true } } },
                 },
@@ -399,6 +403,10 @@ planningRoutes.get('/gantt', async (c) => {
     // ===== Construir tareas (proyecto con roll-up de asignaciones) =====
     const projectTasks = new Map<string, GanttTaskItem>();
     const assignmentTasks: GanttTaskItem[] = [];
+
+    // Aplanar unión de etiquetas al shape compartido EtiquetaRef
+    const toRefs = (links: Array<{ etiqueta: { id: string; nombre: string; color: string } }>) =>
+      links.map((l) => ({ id: l.etiqueta.id, nombre: l.etiqueta.nombre, color: l.etiqueta.color }));
 
     proyectos.forEach((p) => {
       const asignaciones = p.asignaciones;
@@ -455,6 +463,7 @@ planningRoutes.get('/gantt', async (c) => {
         notas: p.descripcion ?? undefined,
         estado: p.estado as GanttTaskItem['estado'],
         esCritica: p.relevante, // marcación manual de relevancia (ya no se calcula ruta crítica)
+        etiquetas: toRefs(p.etiquetas),
       });
 
       // Filas hijas: una por asignación (colgada de su nodo WBS vinculado)
@@ -481,6 +490,7 @@ planningRoutes.get('/gantt', async (c) => {
           notas: a.notas ?? undefined,
           estado: a.estado as GanttTaskItem['estado'],
           esCritica: false,
+          etiquetas: toRefs(a.etiquetas),
         });
       });
     });
@@ -521,6 +531,7 @@ planningRoutes.get('/gantt', async (c) => {
           notas: a.descripcion ?? undefined,
           estado: undefined,
           esCritica: a.relevante,
+          etiquetas: toRefs(a.etiquetas),
         };
         actTaskById.set(a.id, actTask);
 
@@ -541,6 +552,7 @@ planningRoutes.get('/gantt', async (c) => {
           notas: t.descripcion ?? undefined,
           estado: undefined,
           esCritica: t.relevante,
+          etiquetas: toRefs(t.etiquetas),
         }));
         wbsTareasPorActividad.set(a.id, tareasDelGantt);
       });
@@ -591,8 +603,30 @@ planningRoutes.get('/gantt', async (c) => {
       .filter((p) => p.subprojectId && !projectTasks.has(p.subprojectId))
       .forEach((p) => emitProject(p.id));
 
+    // ===== Filtro por etiqueta (solo Vista Proyecto, decisión del usuario):
+    // se conservan los nodos con alguna de las etiquetas seleccionadas y
+    // sus ancestros, para que la jerarquía siga visible =====
+    let tareasFinales = ordered;
+    if (query.etiquetaId) {
+      const seleccionadas = new Set(query.etiquetaId.split(','));
+      const coincide = (t: GanttTaskItem) => (t.etiquetas ?? []).some((e) => seleccionadas.has(e.id));
+      const mantener = new Set<string>();
+      ordered.forEach((t) => {
+        if (coincide(t)) mantener.add(t.id);
+      });
+      const porId = new Map(ordered.map((t) => [t.id, t]));
+      const addAncestros = (id: string) => {
+        const t = porId.get(id);
+        if (!t?.parentId || mantener.has(t.parentId)) return;
+        mantener.add(t.parentId);
+        addAncestros(t.parentId);
+      };
+      [...mantener].forEach(addAncestros);
+      tareasFinales = ordered.filter((t) => mantener.has(t.id));
+    }
+
     const response: ProjectGanttResponse = {
-      tareas: ordered,
+      tareas: tareasFinales,
       metadata: {
         fechaInicio: query.fechaInicio,
         fechaFin: query.fechaFin,

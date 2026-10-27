@@ -5,6 +5,7 @@ import { AlertTriangle, ChevronDown, ChevronRight, ChevronsDownUp, ChevronsUpDow
 import { cn } from '@/lib/utils';
 import { getContrastColor } from '@operaciones-planner/shared';
 import { Badge } from '@/components/ui/badge';
+import { EtiquetaChips } from '@/components/etiquetas';
 import { usePlanningStore } from '@/stores/planningStore';
 import type { AsignacionGridItem, RecursoGridItem, GanttTaskItem } from '@operaciones-planner/shared';
 
@@ -1137,6 +1138,9 @@ function GanttRow({
                 {colapsada && row.totalHijos > 0 && (
                   <span className="shrink-0 text-[9px] text-muted-foreground">(+{row.totalHijos})</span>
                 )}
+                {(tarea.etiquetas ?? []).length > 0 && (
+                  <EtiquetaChips etiquetas={tarea.etiquetas} size="xs" max={2} />
+                )}
               </>
             ) : tarea.tipo === 'ACTIVIDAD' ? (
               <>
@@ -1144,12 +1148,20 @@ function GanttRow({
                 {colapsada && row.totalHijos > 0 && (
                   <span className="shrink-0 text-[9px] text-muted-foreground">(+{row.totalHijos})</span>
                 )}
+                {(tarea.etiquetas ?? []).length > 0 && (
+                  <EtiquetaChips etiquetas={tarea.etiquetas} size="xs" max={2} />
+                )}
               </>
             ) : (
-              <span className="truncate text-xs leading-tight text-muted-foreground">
-                {'· '}
-                {tarea.nombre}
-              </span>
+              <>
+                <span className="truncate text-xs leading-tight text-muted-foreground">
+                  {'· '}
+                  {tarea.nombre}
+                </span>
+                {(tarea.etiquetas ?? []).length > 0 && (
+                  <EtiquetaChips etiquetas={tarea.etiquetas} size="xs" max={2} />
+                )}
+              </>
             )}
           </div>
           {tarea.esCritica && (

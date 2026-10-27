@@ -40,6 +40,7 @@ import { usePlanningStore } from '@/stores/planningStore';
 import { api } from '@/services/api';
 import { AssignmentFormDialog } from '@/components/planning/AssignmentFormDialog';
 import { ProjectGanttView } from '@/components/planning/VirtualizedTimeGrid';
+import { EtiquetaChips, EtiquetaSelector } from '@/components/etiquetas';
 import {
   useProyectoWBS,
   useRecursos,
@@ -252,6 +253,9 @@ export function ProjectDetailPage() {
             </h1>
             <div className="flex items-center gap-2">
               <Badge variant="secondary" className="text-[10px]">{data?.proyecto.estado}</Badge>
+              {data?.proyecto.etiquetas && data.proyecto.etiquetas.length > 0 && (
+                <EtiquetaChips etiquetas={data.proyecto.etiquetas} size="xs" />
+              )}
               {data && (
                 <span className="hidden text-xs text-muted-foreground sm:inline">
                   {data.metadata.totalActividades} actividades · {data.metadata.totalTareas} tareas ·{' '}
@@ -482,7 +486,10 @@ function ActividadCard({
           className="min-w-0 flex-1 cursor-pointer"
           onClick={() => toggleCollapse(`a-${actividad.id}`)}
         >
-          <p className="truncate text-sm font-bold">{actividad.nombre}</p>
+          <div className="flex min-w-0 items-center gap-1.5">
+            <p className="truncate text-sm font-bold">{actividad.nombre}</p>
+            <EtiquetaChips etiquetas={actividad.etiquetas} size="xs" max={2} />
+          </div>
           {actividad.descripcion && (
             <p className="truncate text-xs text-muted-foreground">{actividad.descripcion}</p>
           )}
@@ -586,6 +593,9 @@ function ActividadCard({
                     {tarea.nombre}
                   </p>
 
+                  {/* Etiquetas de la tarea (estilo Zoho) */}
+                  <EtiquetaChips etiquetas={tarea.etiquetas} size="xs" max={2} />
+
                   {/* Asignados (varias personas por tarea) */}
                   <div className="hidden max-w-[220px] flex-wrap items-center gap-1 md:flex">
                     {(tarea.asignados ?? []).map((a) => (
@@ -674,6 +684,7 @@ function ActividadCard({
                       >
                         {subtarea.nombre}
                       </p>
+                      <EtiquetaChips etiquetas={subtarea.etiquetas} size="xs" max={2} />
                       {puedeEditarSub && (
                         <div className="flex shrink-0 items-center gap-1">
                           <Button
@@ -914,6 +925,11 @@ function WBSDialog({
       ? ((target as Tarea | undefined)?.asignados ?? []).map((a) => a.recursoId)
       : []
   );
+  // Etiquetas (estilo Zoho): normaliza EtiquetaRef[]|string[] → string[]
+  const [etiquetaIds, setEtiquetaIds] = useState<string[]>(() => {
+    const raw = (target as { etiquetas?: Array<{ id: string } | string> } | undefined)?.etiquetas;
+    return Array.isArray(raw) ? raw.map((e) => (typeof e === 'string' ? e : e.id)) : [];
+  });
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -947,6 +963,7 @@ function WBSDialog({
         descripcion: descripcion || undefined,
         fechaInicio: fechaInicio || undefined,
         fechaFin: fechaFin || undefined,
+        etiquetaIds,
       };
 
       if (tipo === 'actividad') {
@@ -963,7 +980,11 @@ function WBSDialog({
           await createTarea.mutateAsync({ actividadId: actividadId!, data: payload });
         }
       } else {
-        const payload = { nombre: nombre.trim(), descripcion: descripcion || undefined };
+        const payload = {
+          nombre: nombre.trim(),
+          descripcion: descripcion || undefined,
+          etiquetaIds,
+        };
         if (isEdit) {
           await updateSubtarea.mutateAsync({ id: (target as Subtarea).id, data: payload });
         } else {
@@ -1045,6 +1066,11 @@ function WBSDialog({
               </div>
             </div>
           )}
+
+          <div className="space-y-2">
+            <Label>Etiquetas ({etiquetaIds.length})</Label>
+            <EtiquetaSelector value={etiquetaIds} onChange={setEtiquetaIds} />
+          </div>
 
           {tipo === 'tarea' && (
             <div className="space-y-2">

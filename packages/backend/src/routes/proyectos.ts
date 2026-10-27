@@ -23,6 +23,7 @@ const proyectoSchema = z.object({
   subprojectId: z.string().optional().nullable(),
   dependencies: z.string().optional().nullable(), // JSON string con IDs predecesores
   relevante: z.boolean().optional(), // marcación manual de importancia
+  etiquetaIds: z.array(z.string()).optional(), // etiquetas (estilo Zoho)
 });
 
 proyectosRoutes.get('/', async (c) => {
@@ -48,11 +49,22 @@ proyectosRoutes.get('/', async (c) => {
     include: {
       cliente: { select: { id: true, nombre: true } },
       _count: { select: { asignaciones: true } },
+      etiquetas: { include: { etiqueta: true } },
     },
     orderBy: [{ clienteId: 'asc' }, { nombre: 'asc' }],
   });
 
-  return c.json(proyectos);
+  // Aplanar etiquetas al shape compartido
+  return c.json(
+    proyectos.map((p) => ({
+      ...p,
+      etiquetas: p.etiquetas.map((e) => ({
+        id: e.etiqueta.id,
+        nombre: e.etiqueta.nombre,
+        color: e.etiqueta.color,
+      })),
+    }))
+  );
 });
 
 proyectosRoutes.get('/:id', async (c) => {
@@ -81,7 +93,7 @@ proyectosRoutes.post('/', async (c) => {
   }
 
   const body = await c.req.json();
-  const validated = proyectoSchema.parse(body);
+  const { etiquetaIds, ...validated } = proyectoSchema.parse(body);
 
   const proyecto = await prisma.proyecto.create({
     data: {
@@ -93,6 +105,16 @@ proyectosRoutes.post('/', async (c) => {
     },
     include: { cliente: true },
   });
+
+  // Etiquetas iniciales (opcional)
+  if (etiquetaIds && etiquetaIds.length > 0) {
+    const validas = await prisma.etiqueta.findMany({
+      where: { id: { in: [...new Set(etiquetaIds)] } },
+      select: { id: true },
+    });
+    const data = validas.map((e) => ({ proyectoId: proyecto.id, etiquetaId: e.id }));
+    if (data.length > 0) await prisma.proyectoEtiqueta.createMany({ data });
+  }
 
   return c.json(proyecto, 201);
 });
@@ -106,34 +128,50 @@ proyectosRoutes.put('/:id', async (c) => {
   const { id } = c.req.param();
   const body = await c.req.json();
   const validated = proyectoSchema.partial().parse(body);
+  // etiquetaIds no es columna de Proyecto: se gestiona en la tabla de unión
+  const { etiquetaIds, ...campos } = validated;
 
   // Si el proyecto ya tiene jerarquía WBS, el % manual no aplica:
   // el avance lo gobierna el roll-up de actividades. Se recalcula aquí mismo.
-  if (validated.percentComplete !== undefined) {
+  if (campos.percentComplete !== undefined) {
     const totalActividades = await prisma.actividad.count({ where: { proyectoId: id } });
     if (totalActividades > 0) {
-      delete validated.percentComplete;
+      delete campos.percentComplete;
     }
   }
 
   const proyecto = await prisma.proyecto.update({
     where: { id },
     data: {
-      ...validated,
-      ...(validated.fechaInicio ? { fechaInicio: new Date(validated.fechaInicio) } : {}),
-      ...(validated.fechaFin ? { fechaFin: new Date(validated.fechaFin) } : {}),
-      ...(validated.scheduledStart !== undefined
-        ? { scheduledStart: validated.scheduledStart ? new Date(validated.scheduledStart) : null }
+      ...campos,
+      ...(campos.fechaInicio ? { fechaInicio: new Date(campos.fechaInicio) } : {}),
+      ...(campos.fechaFin ? { fechaFin: new Date(campos.fechaFin) } : {}),
+      ...(campos.scheduledStart !== undefined
+        ? { scheduledStart: campos.scheduledStart ? new Date(campos.scheduledStart) : null }
         : {}),
-      ...(validated.scheduledEnd !== undefined
-        ? { scheduledEnd: validated.scheduledEnd ? new Date(validated.scheduledEnd) : null }
+      ...(campos.scheduledEnd !== undefined
+        ? { scheduledEnd: campos.scheduledEnd ? new Date(campos.scheduledEnd) : null }
         : {}),
-      ...(validated.percentComplete !== undefined ? { percentComplete: validated.percentComplete } : {}),
-      ...(validated.subprojectId !== undefined ? { subprojectId: validated.subprojectId } : {}),
-      ...(validated.dependencies !== undefined ? { dependencies: validated.dependencies } : {}),
+      ...(campos.percentComplete !== undefined ? { percentComplete: campos.percentComplete } : {}),
+      ...(campos.subprojectId !== undefined ? { subprojectId: campos.subprojectId } : {}),
+      ...(campos.dependencies !== undefined ? { dependencies: campos.dependencies } : {}),
     },
     include: { cliente: true },
   });
+
+  // Etiquetas del proyecto (estilo Zoho): reemplazo completo cuando vienen en el body
+  if (etiquetaIds !== undefined) {
+    const unicos = [...new Set(etiquetaIds)];
+    const validas = unicos.length
+      ? await prisma.etiqueta.findMany({ where: { id: { in: unicos } }, select: { id: true } })
+      : [];
+    const validasSet = new Set(validas.map((e) => e.id));
+    await prisma.proyectoEtiqueta.deleteMany({ where: { proyectoId: id } });
+    const data = unicos
+      .filter((etqId) => validasSet.has(etqId))
+      .map((etqId) => ({ proyectoId: id, etiquetaId: etqId }));
+    if (data.length > 0) await prisma.proyectoEtiqueta.createMany({ data });
+  }
 
   // Devolver el % real (roll-up) si tiene actividades
   const conWBS = await prisma.proyecto.findUnique({

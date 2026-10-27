@@ -1,7 +1,7 @@
-import { Fragment, useState } from 'react';
+import { Fragment, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
-import { format, parseISO } from 'date-fns';
+import { addDays, format, parseISO } from 'date-fns';
 import {
   ArrowLeft,
   CalendarDays,
@@ -9,7 +9,11 @@ import {
   ChevronDown,
   ChevronRight,
   FileDown,
+  FileText,
+  GanttChartSquare,
+  ListTree,
   Loader2,
+  Package,
   Pencil,
   Plus,
   Star,
@@ -29,10 +33,13 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { useAuthStore } from '@/stores/authStore';
+import { usePlanningStore } from '@/stores/planningStore';
 import { api } from '@/services/api';
 import { AssignmentFormDialog } from '@/components/planning/AssignmentFormDialog';
+import { ProjectGanttView } from '@/components/planning/VirtualizedTimeGrid';
 import {
   useProyectoWBS,
   useRecursos,
@@ -45,9 +52,26 @@ import {
   useCreateSubtarea,
   useUpdateSubtarea,
   useDeleteSubtarea,
+  useMateriales,
+  useCreateMaterial,
+  useUpdateMaterial,
+  useDeleteMaterial,
+  useProjectGantt,
+  useUpdateProyectoAvance,
 } from '@/hooks/useApi';
 import { cn } from '@/lib/utils';
-import type { Actividad, Subtarea, Tarea, AsignacionResumen, Asignacion } from '@operaciones-planner/shared';
+import type {
+  Actividad,
+  Subtarea,
+  Tarea,
+  AsignacionResumen,
+  Asignacion,
+  Material,
+  MaterialEstado,
+  GanttTaskItem,
+  ProyectoWBSResponse,
+  TimeScale,
+} from '@operaciones-planner/shared';
 
 // ============================================
 // PERMISOS (definición de roles acordada)
@@ -68,6 +92,15 @@ interface DialogConfig {
   tareaId?: string;
 }
 
+type DetalleTab = 'wbs' | 'materiales' | 'documentos' | 'gantt';
+
+const TABS: { id: DetalleTab; label: string; icon: typeof ListTree }[] = [
+  { id: 'wbs', label: 'Actividades', icon: ListTree },
+  { id: 'materiales', label: 'Materiales', icon: Package },
+  { id: 'documentos', label: 'Documentos', icon: FileText },
+  { id: 'gantt', label: 'Gantt', icon: GanttChartSquare },
+];
+
 export function ProjectDetailPage() {
   const { proyectoId } = useParams<{ proyectoId: string }>();
   const navigate = useNavigate();
@@ -80,6 +113,7 @@ export function ProjectDetailPage() {
   const [dialog, setDialog] = useState<DialogConfig | null>(null);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [exporting, setExporting] = useState(false);
+  const [activeTab, setActiveTab] = useState<DetalleTab>('wbs');
   // Editar/eliminar actividades de planificación (asignaciones) desde el árbol
   const [editingAsignacion, setEditingAsignacion] = useState<Asignacion | null>(null);
   const [formAsignacionOpen, setFormAsignacionOpen] = useState(false);
@@ -259,7 +293,29 @@ export function ProjectDetailPage() {
         </div>
       </div>
 
-      {/* ===== Árbol WBS ===== */}
+      {/* ===== Pestañas del proyecto ===== */}
+      <div className="flex items-center gap-2 border-b bg-card px-4 py-2">
+        <div className="flex items-center rounded-md border p-0.5">
+          {TABS.map((tab) => {
+            const Icon = tab.icon;
+            return (
+              <Button
+                key={tab.id}
+                variant={activeTab === tab.id ? 'secondary' : 'ghost'}
+                size="sm"
+                className="h-7 gap-1.5 px-2"
+                onClick={() => setActiveTab(tab.id)}
+              >
+                <Icon className="h-3.5 w-3.5" />
+                <span>{tab.label}</span>
+              </Button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* ===== Contenido según pestaña ===== */}
+      {activeTab === 'wbs' && (
       <div className="flex-1 overflow-y-auto p-4">
         {isLoading ? (
           <div className="flex h-full items-center justify-center">
@@ -329,6 +385,22 @@ export function ProjectDetailPage() {
           </div>
         )}
       </div>
+      )}
+
+      {activeTab === 'materiales' && proyectoId && (
+        <MaterialesTab proyectoId={proyectoId} canManage={canWBS} />
+      )}
+
+      {activeTab === 'documentos' && <DocumentosTab />}
+
+      {activeTab === 'gantt' && (
+        <GanttProyectoTab
+          proyecto={data?.proyecto}
+          isLoadingWbs={isLoading}
+          canMover={canPlanificar}
+          canAvance={canPlanificar}
+        />
+      )}
 
       {/* ===== Diálogo crear/editar ===== */}
       {dialog && (
@@ -1026,5 +1098,516 @@ function WBSDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+// ============================================
+// PESTAÑA MATERIALES (base del futuro módulo de inventario)
+// ============================================
+
+const CATEGORIAS_SUGERIDAS = [
+  'Electrónico',
+  'Consumible',
+  'Herramienta',
+  'Cableado',
+  'Repuesto',
+  'Otro',
+];
+
+const UNIDADES_SUGERIDAS = ['un', 'mt', 'kg', 'caja', 'rollo', 'par', 'set'];
+
+const ESTADO_MATERIAL_LABEL: Record<MaterialEstado, string> = {
+  PENDIENTE: 'Pendiente',
+  SOLICITADO: 'Solicitado',
+  ENTREGADO: 'Entregado',
+  INSTALADO: 'Instalado',
+  DEVUELTO: 'Devuelto',
+};
+
+function EstadoMaterialBadge({ estado }: { estado: MaterialEstado }) {
+  const conf: Record<MaterialEstado, { variant: 'outline' | 'default'; className?: string }> = {
+    PENDIENTE: { variant: 'outline' },
+    SOLICITADO: { variant: 'default', className: 'bg-amber-500' },
+    ENTREGADO: { variant: 'default', className: 'bg-blue-600' },
+    INSTALADO: { variant: 'default', className: 'bg-green-600' },
+    DEVUELTO: { variant: 'outline' },
+  };
+  const c = conf[estado] ?? { variant: 'outline' as const };
+  return (
+    <Badge variant={c.variant} className={cn('shrink-0 px-1.5 py-0 text-[10px]', c.className)}>
+      {ESTADO_MATERIAL_LABEL[estado] ?? estado}
+    </Badge>
+  );
+}
+
+function MaterialesTab({ proyectoId, canManage }: { proyectoId: string; canManage: boolean }) {
+  const { data: materiales, isLoading } = useMateriales(proyectoId);
+  const deleteMaterial = useDeleteMaterial(proyectoId);
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [editing, setEditing] = useState<Material | null>(null);
+
+  const openCreate = () => {
+    setEditing(null);
+    setDialogOpen(true);
+  };
+
+  const openEdit = (m: Material) => {
+    setEditing(m);
+    setDialogOpen(true);
+  };
+
+  const handleDelete = (m: Material) => {
+    if (confirm(`¿Eliminar el material "${m.nombre}"?`)) {
+      deleteMaterial.mutate(m.id);
+    }
+  };
+
+  return (
+    <div className="flex-1 overflow-y-auto p-4">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <h2 className="text-sm font-semibold">Materiales y activos del proyecto</h2>
+          <p className="text-xs text-muted-foreground">
+            Artículos electrónicos, consumibles, herramientas y otros materiales asociados
+            (base del futuro módulo de inventario)
+          </p>
+        </div>
+        {canManage && (
+          <Button size="sm" onClick={openCreate}>
+            <Plus className="mr-2 h-4 w-4" />
+            Agregar Material
+          </Button>
+        )}
+      </div>
+
+      {isLoading ? (
+        <div className="flex justify-center py-10">
+          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        </div>
+      ) : (materiales ?? []).length === 0 ? (
+        <Card>
+          <CardContent className="flex flex-col items-center gap-3 py-10 text-center">
+            <Package className="h-10 w-10 text-muted-foreground" />
+            <p className="font-medium">Este proyecto aún no tiene materiales registrados</p>
+            <p className="max-w-md text-sm text-muted-foreground">
+              Registra los materiales y activos que necesita el proyecto: artículos electrónicos,
+              consumibles, herramientas, cableado, etc.
+            </p>
+            {canManage && (
+              <Button className="mt-2" onClick={openCreate}>
+                <Plus className="mr-2 h-4 w-4" />
+                Agregar primer material
+              </Button>
+            )}
+          </CardContent>
+        </Card>
+      ) : (
+        <Card className="overflow-hidden">
+          <div className="hidden items-center gap-2 bg-muted/40 px-3 py-2 text-xs font-semibold text-muted-foreground md:grid md:grid-cols-[1fr_120px_90px_110px_80px]">
+            <span>Material</span>
+            <span>Categoría</span>
+            <span>Cantidad</span>
+            <span>Estado</span>
+            <span className="text-right">Acciones</span>
+          </div>
+          <div className="divide-y">
+            {(materiales ?? []).map((m) => (
+              <div
+                key={m.id}
+                className="group grid items-center gap-2 px-3 py-2 hover:bg-accent/30 md:grid-cols-[1fr_120px_90px_110px_80px]"
+              >
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium">{m.nombre}</p>
+                  {m.descripcion && (
+                    <p className="truncate text-xs text-muted-foreground" title={m.descripcion}>
+                      {m.descripcion}
+                    </p>
+                  )}
+                </div>
+                <div className="min-w-0">
+                  {m.categoria ? (
+                    <Badge variant="outline" className="truncate px-1.5 py-0 text-[10px]">
+                      {m.categoria}
+                    </Badge>
+                  ) : (
+                    <span className="text-xs text-muted-foreground">—</span>
+                  )}
+                </div>
+                <span className="text-sm tabular-nums">
+                  {m.cantidad} <span className="text-xs text-muted-foreground">{m.unidad ?? ''}</span>
+                </span>
+                <EstadoMaterialBadge estado={m.estado} />
+                {canManage ? (
+                  <div className="flex items-center justify-end gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7"
+                      title="Editar material"
+                      onClick={() => openEdit(m)}
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7"
+                      title="Eliminar material"
+                      onClick={() => handleDelete(m)}
+                    >
+                      <Trash2 className="h-3.5 w-3.5 text-destructive" />
+                    </Button>
+                  </div>
+                ) : (
+                  <span />
+                )}
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
+
+      {dialogOpen && (
+        <MaterialDialog
+          proyectoId={proyectoId}
+          material={editing}
+          onClose={() => {
+            setDialogOpen(false);
+            setEditing(null);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+function MaterialDialog({
+  proyectoId,
+  material,
+  onClose,
+}: {
+  proyectoId: string;
+  material: Material | null;
+  onClose: () => void;
+}) {
+  const createMaterial = useCreateMaterial(proyectoId);
+  const updateMaterial = useUpdateMaterial(proyectoId);
+  const isEdit = !!material;
+
+  const [nombre, setNombre] = useState(material?.nombre ?? '');
+  const [categoria, setCategoria] = useState(material?.categoria ?? '');
+  const [cantidad, setCantidad] = useState(String(material?.cantidad ?? 1));
+  const [unidad, setUnidad] = useState(material?.unidad ?? '');
+  const [estado, setEstado] = useState<MaterialEstado>(material?.estado ?? 'PENDIENTE');
+  const [descripcion, setDescripcion] = useState(material?.descripcion ?? '');
+  const [notas, setNotas] = useState(material?.notas ?? '');
+  const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  const handleSubmit = async () => {
+    setError(null);
+    if (!nombre.trim()) {
+      setError('El nombre es obligatorio');
+      return;
+    }
+    const cant = parseFloat(cantidad);
+    if (Number.isNaN(cant) || cant <= 0) {
+      setError('La cantidad debe ser un número mayor que 0');
+      return;
+    }
+    setSaving(true);
+    try {
+      const payload = {
+        nombre: nombre.trim(),
+        categoria: categoria || undefined,
+        cantidad: cant,
+        unidad: unidad || undefined,
+        estado,
+        descripcion: descripcion || undefined,
+        notas: notas || undefined,
+      };
+      if (isEdit && material) {
+        await updateMaterial.mutateAsync({ id: material.id, data: payload });
+      } else {
+        await createMaterial.mutateAsync({ proyectoId, ...payload });
+      }
+      onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Error al guardar');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>{isEdit ? 'Editar material' : 'Nuevo material'}</DialogTitle>
+          <DialogDescription>
+            Registra los materiales y activos del proyecto: artículos electrónicos,
+            consumibles, herramientas, etc.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="grid gap-4 py-2">
+          <div className="space-y-2">
+            <Label htmlFor="mat-nombre">
+              Nombre <span className="text-destructive">*</span>
+            </Label>
+            <Input
+              id="mat-nombre"
+              value={nombre}
+              onChange={(e) => setNombre(e.target.value)}
+              placeholder="Ej: Radio RTU Motorola"
+              autoFocus
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="mat-categoria">Categoría</Label>
+              <Input
+                id="mat-categoria"
+                list="categorias-material"
+                value={categoria}
+                onChange={(e) => setCategoria(e.target.value)}
+                placeholder="Ej: Electrónico"
+              />
+              <datalist id="categorias-material">
+                {CATEGORIAS_SUGERIDAS.map((c) => (
+                  <option key={c} value={c} />
+                ))}
+              </datalist>
+            </div>
+            <div className="space-y-2">
+              <Label>Estado</Label>
+              <Select value={estado} onValueChange={(v) => setEstado(v as MaterialEstado)}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {(Object.keys(ESTADO_MATERIAL_LABEL) as MaterialEstado[]).map((e) => (
+                    <SelectItem key={e} value={e}>
+                      {ESTADO_MATERIAL_LABEL[e]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="mat-cantidad">Cantidad</Label>
+              <Input
+                id="mat-cantidad"
+                type="number"
+                min="0"
+                step="any"
+                value={cantidad}
+                onChange={(e) => setCantidad(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="mat-unidad">Unidad</Label>
+              <Input
+                id="mat-unidad"
+                list="unidades-material"
+                value={unidad}
+                onChange={(e) => setUnidad(e.target.value)}
+                placeholder="un, mt, kg..."
+              />
+              <datalist id="unidades-material">
+                {UNIDADES_SUGERIDAS.map((u) => (
+                  <option key={u} value={u} />
+                ))}
+              </datalist>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="mat-descripcion">Descripción</Label>
+            <Textarea
+              id="mat-descripcion"
+              value={descripcion}
+              onChange={(e) => setDescripcion(e.target.value)}
+              rows={2}
+              placeholder="Modelo, número de parte, detalles técnicos..."
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="mat-notas">Notas</Label>
+            <Textarea
+              id="mat-notas"
+              value={notas}
+              onChange={(e) => setNotas(e.target.value)}
+              rows={2}
+              placeholder="Observaciones, proveedor, ubicación física..."
+            />
+          </div>
+
+          {error && (
+            <div className="rounded-md border border-destructive/20 bg-destructive/10 p-2 text-sm text-destructive">
+              {error}
+            </div>
+          )}
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>
+            Cancelar
+          </Button>
+          <Button onClick={handleSubmit} disabled={saving}>
+            {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            {isEdit ? 'Guardar cambios' : 'Crear'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ============================================
+// PESTAÑA DOCUMENTOS (placeholder — módulo en diseño)
+// ============================================
+
+function DocumentosTab() {
+  return (
+    <div className="flex-1 overflow-y-auto p-4">
+      <Card>
+        <CardContent className="flex flex-col items-center gap-3 py-12 text-center">
+          <FileText className="h-10 w-10 text-muted-foreground" />
+          <p className="font-medium">Gestión de documentos del proyecto</p>
+          <p className="max-w-md text-sm text-muted-foreground">
+            Aquí podrás subir, descargar y organizar los documentos asociados al proyecto:
+            planos, informes, actas, protocolos y manuales. El módulo está en diseño y se
+            habilitará en una próxima actualización.
+          </p>
+          <Badge variant="outline" className="mt-1">Próximamente</Badge>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+// ============================================
+// PESTAÑA GANTT (solo del proyecto seleccionado)
+// ============================================
+
+function GanttProyectoTab({
+  proyecto,
+  isLoadingWbs,
+  canMover,
+  canAvance,
+}: {
+  proyecto?: ProyectoWBSResponse['proyecto'];
+  isLoadingWbs: boolean;
+  canMover: boolean;
+  canAvance: boolean;
+}) {
+  const { timeScale, setTimeScale } = usePlanningStore();
+  const queryClient = useQueryClient();
+  const updateAvance = useUpdateProyectoAvance();
+
+  // Rango del gantt: fechas programadas del proyecto (o fechaInicio/Fin) con
+  // margen de una semana; sin fechas → ventana móvil alrededor de hoy
+  const { start, end } = useMemo(() => {
+    const inicioStr = proyecto?.scheduledStart ?? proyecto?.fechaInicio;
+    const finStr = proyecto?.scheduledEnd ?? proyecto?.fechaFin;
+    return {
+      start: inicioStr ? addDays(parseISO(inicioStr.toString()), -7) : addDays(new Date(), -15),
+      end: finStr ? addDays(parseISO(finStr.toString()), 7) : addDays(new Date(), 45),
+    };
+  }, [proyecto?.scheduledStart, proyecto?.fechaInicio, proyecto?.scheduledEnd, proyecto?.fechaFin]);
+
+  const { data: ganttData, isLoading } = useProjectGantt(
+    {
+      fechaInicio: format(start, 'yyyy-MM-dd'),
+      fechaFin: format(end, 'yyyy-MM-dd'),
+      proyectoId: proyecto?.id,
+    },
+    { enabled: !!proyecto?.id }
+  );
+
+  const handleUpdatePercent = (proyectoId: string, percent: number) => {
+    updateAvance.mutate({ id: proyectoId, percentComplete: percent });
+  };
+
+  const handleMoveTask = async (tarea: GanttTaskItem, dias: number) => {
+    const nuevaInicio = format(addDays(parseISO(tarea.fechaInicio), dias), 'yyyy-MM-dd');
+    const nuevaFin = format(addDays(parseISO(tarea.fechaFin), dias), 'yyyy-MM-dd');
+    try {
+      if (tarea.tipo === 'PROYECTO') {
+        await api.put(`/api/proyectos/${tarea.id}`, {
+          scheduledStart: nuevaInicio,
+          scheduledEnd: nuevaFin,
+        });
+      } else if (tarea.tipo === 'ACTIVIDAD') {
+        await api.put(`/api/actividades/${tarea.id}`, {
+          fechaInicio: nuevaInicio,
+          fechaFin: nuevaFin,
+        });
+      } else if (tarea.tipo === 'TAREA') {
+        await api.put(`/api/actividades/tarea/${tarea.id}`, {
+          fechaInicio: nuevaInicio,
+          fechaFin: nuevaFin,
+        });
+      } else {
+        return; // las asignaciones se mueven desde la vista de recursos
+      }
+      await queryClient.invalidateQueries({ queryKey: ['project-gantt'] });
+      await queryClient.invalidateQueries({ queryKey: ['proyecto-wbs'] });
+    } catch (err) {
+      alert('No se pudo reprogramar: ' + (err instanceof Error ? err.message : String(err)));
+    }
+  };
+
+  if (isLoadingWbs || !proyecto) {
+    return (
+      <div className="flex flex-1 items-center justify-center">
+        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="flex items-center justify-between gap-3 border-b bg-card px-4 py-2">
+        <p className="hidden text-sm text-muted-foreground sm:block">
+          Gantt del proyecto — arrastra las barras para reprogramar
+        </p>
+        <Select value={timeScale} onValueChange={(v) => setTimeScale(v as TimeScale)}>
+          <SelectTrigger className="w-32">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="day">Día</SelectItem>
+            <SelectItem value="week">Semanal</SelectItem>
+            <SelectItem value="fortnight">Quincenal</SelectItem>
+            <SelectItem value="month">Mensual</SelectItem>
+            <SelectItem value="quarter">Trimestral</SelectItem>
+            <SelectItem value="year">Anual</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+      <div className="min-h-0 flex-1">
+        {isLoading ? (
+          <div className="flex h-full items-center justify-center">
+            <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+          </div>
+        ) : (
+          <ProjectGanttView
+            tareas={ganttData?.tareas ?? []}
+            fechaInicio={start}
+            fechaFin={end}
+            onUpdatePercent={canAvance ? handleUpdatePercent : undefined}
+            onMoveTask={canMover ? handleMoveTask : undefined}
+            canMoveTask={canMover}
+          />
+        )}
+      </div>
+    </div>
   );
 }

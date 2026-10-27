@@ -89,6 +89,27 @@ planningRoutes.get('/grid', async (c) => {
       ],
     });
 
+    // Orden del panel de recursos (decisión UX): dentro de cada departamento,
+    // 1) recursos CON equipo (por orden del equipo), 2) personas sin equipo,
+    // 3) vehículos y otros equipos técnicos al final.
+    // (SQLite ordena los NULL primero en ASC, lo que dejaba los "Sin Equipo" arriba)
+    const TIPO_ORDEN: Record<string, number> = {
+      PERSONA: 0,
+      EQUIPO_TECNICO: 1,
+      HERRAMIENTA: 2,
+      VEHICULO: 3,
+      OTRO: 4,
+    };
+    const recursosOrdenados = [...recursos].sort((a, b) => {
+      const equipoA = a.equipoId ? 0 : 1;
+      const equipoB = b.equipoId ? 0 : 1;
+      if (equipoA !== equipoB) return equipoA - equipoB;
+      const tipoA = TIPO_ORDEN[a.tipo] ?? 9;
+      const tipoB = TIPO_ORDEN[b.tipo] ?? 9;
+      if (tipoA !== tipoB) return tipoA - tipoB;
+      return 0; // estable: conserva depto → equipo.orden → nombre
+    });
+
     const whereAsignacion: Record<string, unknown> = {
       fechaInicio: { lte: fechaFin },
       fechaFin: { gte: fechaInicio },
@@ -110,7 +131,7 @@ planningRoutes.get('/grid', async (c) => {
       },
     });
 
-    const recursosGrid: RecursoGridItem[] = recursos.map((r) => {
+    const recursosGrid: RecursoGridItem[] = recursosOrdenados.map((r) => {
       const diasPeriodo = Math.ceil((fechaFin.getTime() - fechaInicio.getTime()) / (1000 * 60 * 60 * 24)) + 1;
 
       // Si no tiene disponibilidad configurada, asumir jornada estándar 8h x 5 días hábiles
@@ -322,8 +343,19 @@ planningRoutes.get('/gantt', async (c) => {
     const fechaFin = new Date(query.fechaFin + 'T23:59:59');
 
     const whereProyecto: Record<string, unknown> = { activo: true };
-    if (query.proyectoId) whereProyecto.id = query.proyectoId;
+    // Multi-selección del panel de filtros: "id1,id2" (compatible con un solo id)
+    if (query.proyectoId) whereProyecto.id = { in: query.proyectoId.split(',') };
     if (query.clienteId) whereProyecto.clienteId = query.clienteId;
+
+    // Filtro por recurso (panel de filtros): aplica a las asignaciones del Gantt.
+    // La estructura WBS (proyecto → actividad → tarea) se mantiene; solo se
+    // ocultan las asignaciones (hojas) de otros recursos.
+    const whereAsignacionGantt: Record<string, unknown> = {
+      fechaInicio: { lte: fechaFin },
+      fechaFin: { gte: fechaInicio },
+      estado: { not: 'CANCELADA' },
+    };
+    if (query.recursoId) whereAsignacionGantt.recursoId = { in: query.recursoId.split(',') };
 
     const proyectos = await prisma.proyecto.findMany({
       where: whereProyecto,
@@ -331,11 +363,7 @@ planningRoutes.get('/gantt', async (c) => {
         cliente: { select: { nombre: true } },
         subproyectos: { select: { id: true } },
         asignaciones: {
-          where: {
-            fechaInicio: { lte: fechaFin },
-            fechaFin: { gte: fechaInicio },
-            estado: { not: 'CANCELADA' },
-          },
+          where: whereAsignacionGantt,
           include: {
             recurso: { select: { nombre: true, apellido: true } },
             tipoActividad: { select: { nombre: true, color: true } },

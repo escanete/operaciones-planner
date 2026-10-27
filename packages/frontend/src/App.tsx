@@ -4,7 +4,6 @@ import { useAuthStore } from '@/stores/authStore';
 import { Layout } from '@/components/layout/Layout';
 import { LoginPage } from '@/pages/LoginPage';
 import { PlanningPage } from '@/pages/PlanningPage';
-import { RecursosPage } from '@/pages/RecursosPage';
 import { ProyectosPage } from '@/pages/ProyectosPage';
 import { ProjectDetailPage } from '@/pages/ProjectDetailPage';
 import { ReportesPage } from '@/pages/ReportesPage';
@@ -73,7 +72,6 @@ export function App() {
       }>
         <Route index element={<Navigate to="/planning" replace />} />
         <Route path="planning" element={<PlanningPage />} />
-        <Route path="recursos" element={<RecursosPage />} />
         <Route path="proyectos" element={<ProyectosPage />} />
         <Route path="proyectos/:proyectoId" element={<ProjectDetailPage />} />
         <Route path="reportes" element={<ReportesPage />} />

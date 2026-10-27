@@ -16,6 +16,7 @@ import type {
   Actividad,
   Tarea,
   Subtarea,
+  Material,
   CargaTrabajoResumen,
   OcupacionProyectoResumen,
   CargaEquipoResumen,
@@ -418,12 +419,16 @@ export function usePlanningGrid(params: {
 // ============================================
 // GANTT (vista tipo MS Project — decisión d)
 // ============================================
-export function useProjectGantt(params: {
-  fechaInicio: string;
-  fechaFin: string;
-  clienteId?: string;
-  proyectoId?: string;
-}) {
+export function useProjectGantt(
+  params: {
+    fechaInicio: string;
+    fechaFin: string;
+    clienteId?: string;
+    proyectoId?: string;
+    recursoId?: string;
+  },
+  options?: { enabled?: boolean }
+) {
   const searchParams = new URLSearchParams();
   Object.entries(params).forEach(([key, value]) => {
     if (value) searchParams.set(key, value);
@@ -433,6 +438,7 @@ export function useProjectGantt(params: {
     queryKey: ['project-gantt', params],
     queryFn: () => api.get<ProjectGanttResponse>(`/api/planning/gantt?${searchParams.toString()}`),
     staleTime: 1000 * 30,
+    enabled: options?.enabled ?? true,
   });
 }
 
@@ -549,6 +555,49 @@ export function useDeleteSubtarea(proyectoId: string) {
   return useMutation({
     mutationFn: (id: string) => api.delete(`/api/actividades/subtarea/${id}`),
     onSuccess: () => invalidateWBS(queryClient, proyectoId),
+  });
+}
+
+// ============================================
+// MATERIALES DEL PROYECTO
+// ============================================
+export function useMateriales(proyectoId: string) {
+  return useQuery({
+    queryKey: ['materiales', proyectoId],
+    queryFn: () => api.get<Material[]>(`/api/materiales?proyectoId=${proyectoId}`),
+    enabled: !!proyectoId,
+  });
+}
+
+function invalidateMateriales(
+  queryClient: ReturnType<typeof useQueryClient>,
+  proyectoId: string
+) {
+  queryClient.invalidateQueries({ queryKey: ['materiales', proyectoId] });
+}
+
+export function useCreateMaterial(proyectoId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (data: Record<string, unknown>) => api.post<Material>('/api/materiales', data),
+    onSuccess: () => invalidateMateriales(queryClient, proyectoId),
+  });
+}
+
+export function useUpdateMaterial(proyectoId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, data }: { id: string; data: Record<string, unknown> }) =>
+      api.put<Material>(`/api/materiales/${id}`, data),
+    onSuccess: () => invalidateMateriales(queryClient, proyectoId),
+  });
+}
+
+export function useDeleteMaterial(proyectoId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.delete(`/api/materiales/${id}`),
+    onSuccess: () => invalidateMateriales(queryClient, proyectoId),
   });
 }
 

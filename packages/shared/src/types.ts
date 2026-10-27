@@ -444,6 +444,11 @@ export interface ProyectoWBSResponse {
     estado: ProyectoEstado;
     percentComplete: number;
     relevante: boolean;
+    // Fechas para la vista Gantt del proyecto (scheduled > fechaInicio/Fin)
+    fechaInicio?: Date;
+    fechaFin?: Date;
+    scheduledStart?: Date;
+    scheduledEnd?: Date;
   };
   actividades: Actividad[];
   // Asignaciones de planificación sin vínculo WBS (cuelgan directo del proyecto)
@@ -454,6 +459,29 @@ export interface ProyectoWBSResponse {
     totalSubtareas: number;
     totalAsignaciones: number;
   };
+}
+
+// ============================================
+// MATERIALES / ACTIVOS DEL PROYECTO
+// (base del futuro módulo de inventario)
+// ============================================
+
+export type MaterialEstado = 'PENDIENTE' | 'SOLICITADO' | 'ENTREGADO' | 'INSTALADO' | 'DEVUELTO';
+
+export interface Material {
+  id: string;
+  proyectoId: string;
+  nombre: string;
+  descripcion?: string;
+  categoria?: string;
+  cantidad: number;
+  unidad?: string;
+  estado: MaterialEstado;
+  recursoId?: string; // vínculo con activo del catálogo (inventario futuro)
+  notas?: string;
+  creadoPorId?: string;
+  createdAt: Date;
+  updatedAt: Date;
 }
 
 // ============================================

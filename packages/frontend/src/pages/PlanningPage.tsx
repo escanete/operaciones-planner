@@ -10,7 +10,7 @@ import { AssignmentFormDialog } from '@/components/planning/AssignmentFormDialog
 import { AssignmentDetailPanel } from '@/components/planning/AssignmentDetailPanel';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { CalendarCheck, CalendarDays, ChevronLeft, ChevronRight, Columns3, GanttChartSquare, Plus, SlidersHorizontal } from 'lucide-react';
+import { CalendarCheck, CalendarDays, ChevronLeft, ChevronRight, Columns3, GanttChartSquare, Plus, SlidersHorizontal, Truck } from 'lucide-react';
 import { addDays, format, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
 import type { Asignacion, ConflictInfo, GanttTaskItem, TimeScale } from '@operaciones-planner/shared';
@@ -30,6 +30,8 @@ export function PlanningPage() {
     goToDate,
     soloHabiles,
     setSoloHabiles,
+    mostrarVehiculos,
+    setMostrarVehiculos,
     selectAssignment,
     setSidebarOpen,
   } = usePlanningStore();
@@ -51,12 +53,25 @@ export function PlanningPage() {
     tipoActividadId: filters.tipoActividadId,
   });
 
-  // Gantt (decisión d): solo se consulta cuando la vista está activa
+  // Vista Recursos: opción para ocultar filas de vehículos/equipos técnicos
+  // (las camionetas quedan al final del panel; desde aquí se deciden ver o no)
+  const recursosVisibles = useMemo(
+    () =>
+      mostrarVehiculos
+        ? (data?.recursos ?? [])
+        : (data?.recursos ?? []).filter((r) => r.tipo === 'PERSONA'),
+    [data?.recursos, mostrarVehiculos]
+  );
+
+  // Gantt (decisión d): solo se consulta cuando la vista está activa.
+  // Se pasan los filtros del panel: proyectoId y recursoId (fix: antes el
+  // filtro por recurso no tenía efecto en la Vista Proyecto)
   const isGantt = viewMode === 'gantt';
   const { data: ganttData, isLoading: ganttLoading } = useProjectGantt({
     fechaInicio: format(start, 'yyyy-MM-dd'),
     fechaFin: format(end, 'yyyy-MM-dd'),
     proyectoId: filters.proyectoId,
+    recursoId: filters.recursoId,
   });
   const updateAvance = useUpdateProyectoAvance();
 
@@ -255,6 +270,24 @@ export function PlanningPage() {
               </Button>
             </div>
 
+            {/* Solo en Vista Recursos: mostrar u ocultar camionetas/equipos técnicos */}
+            {!isGantt && (
+              <Button
+                variant={mostrarVehiculos ? 'secondary' : 'ghost'}
+                size="sm"
+                className="h-8 gap-1.5 px-2 text-xs"
+                onClick={() => setMostrarVehiculos(!mostrarVehiculos)}
+                title={
+                  mostrarVehiculos
+                    ? 'Vehículos y equipos técnicos visibles (al final del panel). Clic para ocultarlos'
+                    : 'Vehículos y equipos técnicos ocultos. Clic para mostrarlos'
+                }
+              >
+                <Truck className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">Vehículos</span>
+              </Button>
+            )}
+
             <Select value={timeScale} onValueChange={(v) => setTimeScale(v as TimeScale)}>
               <SelectTrigger className="w-32">
                 <SelectValue />
@@ -311,7 +344,7 @@ export function PlanningPage() {
             </div>
           ) : (
             <VirtualizedTimeGrid
-              recursos={data?.recursos ?? []}
+              recursos={recursosVisibles}
               asignaciones={data?.asignaciones ?? []}
               fechaInicio={start}
               fechaFin={end}

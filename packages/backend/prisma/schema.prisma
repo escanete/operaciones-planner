@@ -116,15 +116,45 @@ model Proyecto {
   scheduledEnd     DateTime? // Término programado (Gantt)
   percentComplete  Float?    // 0-100 avance del proyecto
   subprojectId     String?   // Proyecto padre (jerarquía sub-proyectos)
-  subproyecto      Proyecto? @relation("ProyectoJerarquia", fields: [subprojectId], references: [id], onDelete: SetNull)
+  subproyecto       Proyecto? @relation("ProyectoJerarquia", fields: [subprojectId], references: [id], onDelete: SetNull)
   subproyectos     Proyecto[] @relation("ProyectoJerarquia")
   dependencies     String?  // JSON string con IDs de predecesores (SQLite no soporta Json nativo)
   relevante        Boolean  @default(false) // Marcación manual de importancia (reemplaza la ruta crítica automática)
+
+  materiales       Material[]
 
   @@index([clienteId])
   @@index([estado])
   @@index([subprojectId])
   @@map("proyectos")
+}
+
+// ============================================
+// MATERIALES / ACTIVOS DEL PROYECTO
+// (base del futuro módulo de inventario: recursoId
+// vincula el material con un activo del catálogo)
+// ============================================
+
+model Material {
+  id          String   @id @default(cuid())
+  proyectoId  String
+  proyecto    Proyecto @relation(fields: [proyectoId], references: [id], onDelete: Cascade)
+  nombre      String
+  descripcion String?
+  categoria   String?  // ej: ELECTRONICO, CONSUMIBLE, HERRAMIENTA, CABLE, OTRO (texto libre por ahora)
+  cantidad    Float    @default(1)
+  unidad      String?  // "un", "mt", "kg", "caja"...
+  estado      String   @default("PENDIENTE") // PENDIENTE, SOLICITADO, ENTREGADO, INSTALADO, DEVUELTO
+  // Vínculo futuro con inventario: activo/recurso del catálogo que representa este material
+  recursoId   String?
+  recurso     Recurso? @relation("MaterialActivo", fields: [recursoId], references: [id], onDelete: SetNull)
+  notas       String?
+  creadoPorId String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([proyectoId])
+  @@map("materiales")
 }
 
 // ============================================
@@ -173,6 +203,7 @@ model Recurso {
   ausencias     Ausencia[]
   equiposLiderados Equipo[] @relation("EquipoLider")
   tareasAsignadas TareaAsignado[]
+  materialesComoActivo Material[] @relation("MaterialActivo")
   user          User?
 
   @@index([departamentoId, activo])

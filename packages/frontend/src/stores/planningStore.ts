@@ -21,6 +21,8 @@ interface PlanningState {
   assignmentModalOpen: boolean;
   // Contar solo días hábiles (excluye sábados y domingos)
   soloHabiles: boolean;
+  // Vista Recursos: mostrar filas de vehículos/equipos técnicos (camionetas, etc.)
+  mostrarVehiculos: boolean;
   
   // Drag & Drop
   draggingAssignmentId: string | null;
@@ -39,6 +41,7 @@ interface PlanningState {
   setDraggingAssignment: (id: string | null) => void;
   setAssignmentModalOpen: (open: boolean) => void;
   setSoloHabiles: (solo: boolean) => void;
+  setMostrarVehiculos: (mostrar: boolean) => void;
   getDateRange: () => { start: Date; end: Date };
 }
 
@@ -54,8 +57,10 @@ export const usePlanningStore = create<PlanningState>((set, get) => ({
   draggingAssignmentId: null,
   assignmentModalOpen: false,
   soloHabiles: false,
+  mostrarVehiculos: true,
 
   setSoloHabiles: (soloHabiles) => set({ soloHabiles }),
+  setMostrarVehiculos: (mostrarVehiculos) => set({ mostrarVehiculos }),
 
   setViewMode: (viewMode) => set({ viewMode }),
   

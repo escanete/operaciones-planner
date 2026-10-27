@@ -81,6 +81,13 @@ function MultiSelectFilter({
 
 const toIds = (v?: string) => (v ? v.split(',').filter(Boolean) : []);
 
+const TIPO_RECURSO_LABEL: Record<string, string> = {
+  VEHICULO: 'Vehículo',
+  EQUIPO_TECNICO: 'Equipo técnico',
+  HERRAMIENTA: 'Herramienta',
+  OTRO: 'Otro',
+};
+
 export function Sidebar() {
   const { sidebarOpen, filters, setFilters, clearFilters, setSidebarOpen } = usePlanningStore();
 
@@ -88,7 +95,9 @@ export function Sidebar() {
   const { data: equipos } = useEquipos();
   const { data: proyectos } = useProyectos();
   const { data: tiposActividad } = useTiposActividad();
-  const { data: recursos } = useRecursos({ tipo: 'PERSONA', activo: true });
+  // Todos los recursos activos (personas + vehículos/equipos técnicos),
+  // para poder filtrar también por camioneta en la vista de recursos
+  const { data: recursos } = useRecursos({ activo: true });
 
   // Cerrado: no renderizar nada. Se reabre desde el botón "Filtros"
   // del toolbar de Planificación (evitaba solaparse con la flecha del período).
@@ -154,7 +163,11 @@ export function Sidebar() {
           label="Recurso"
           options={(recursos ?? []).map((r) => ({
             id: r.id,
-            label: `${r.nombre} ${r.apellido ?? ''}`.trim(),
+            label:
+              `${r.nombre} ${r.apellido ?? ''}`.trim() +
+              (r.tipo !== 'PERSONA'
+                ? ` · ${TIPO_RECURSO_LABEL[r.tipo] ?? r.tipo}`
+                : ''),
           }))}
           selected={toIds(filters.recursoId)}
           onChange={(ids) => setFilters({ recursoId: ids.length ? ids.join(',') : undefined })}

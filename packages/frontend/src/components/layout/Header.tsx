@@ -49,9 +49,6 @@ export function Header() {
           <Button variant="ghost" size="sm" onClick={() => goPlanning('grid')}>
             Planificación
           </Button>
-          <Link to="/recursos">
-            <Button variant="ghost" size="sm">Recursos</Button>
-          </Link>
           <Link to="/proyectos">
             <Button variant="ghost" size="sm">Proyectos</Button>
           </Link>

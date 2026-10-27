@@ -160,7 +160,18 @@ actividadesRoutes.get('/proyecto/:proyectoId', async (c) => {
 
   const proyecto = await prisma.proyecto.findUnique({
     where: { id: proyectoId },
-    select: { id: true, nombre: true, estado: true, percentComplete: true, relevante: true },
+    select: {
+      id: true,
+      nombre: true,
+      estado: true,
+      percentComplete: true,
+      relevante: true,
+      // Fechas para la vista Gantt del proyecto (scheduled > fechaInicio/Fin)
+      fechaInicio: true,
+      fechaFin: true,
+      scheduledStart: true,
+      scheduledEnd: true,
+    },
   });
   if (!proyecto) return c.json({ error: 'Proyecto no encontrado' }, 404);
 
@@ -254,6 +265,11 @@ actividadesRoutes.get('/proyecto/:proyectoId', async (c) => {
       ...proyecto,
       estado: proyecto.estado as ProyectoWBSResponse['proyecto']['estado'],
       percentComplete: proyecto.percentComplete ?? 0,
+      // Prisma devuelve null en los opcionales; el tipo compartido usa undefined
+      fechaInicio: proyecto.fechaInicio ?? undefined,
+      fechaFin: proyecto.fechaFin ?? undefined,
+      scheduledStart: proyecto.scheduledStart ?? undefined,
+      scheduledEnd: proyecto.scheduledEnd ?? undefined,
     },
     actividades: actividadesOut as unknown as Actividad[],
     asignaciones: aNivelProyecto,

@@ -31,6 +31,8 @@ services:
       CORS_ORIGIN: http://192.168.25.7:5173
       # Orígenes que Better-Auth acepta para login (separados por coma)
       TRUSTED_ORIGINS: http://192.168.25.7:5173,http://192.168.25.7:3001,http://localhost:5173,http://localhost:3001
+      # Bundle del MCP local (Claude Desktop) que sirve este backend
+      MCP_BUNDLE_PATH: /app/public/operaciones-planner-mcp.js
     volumes:
       - db_data:/app/data
     ports:

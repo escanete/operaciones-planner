@@ -4,23 +4,36 @@
 # Uso:
 #   bash install.sh
 #   bash install.sh --api-url http://192.168.25.7:3001
+#   bash install.sh --bundle-url /ruta/local/operaciones-planner-mcp.js
 #   bash install.sh --uninstall
 
 set -euo pipefail
 
 API_URL="http://192.168.25.7:3001"
+BUNDLE_URL=""
+LOGIN_EMAIL=""
+LOGIN_PASSWORD=""
 UNINSTALL=0
 INSTALL_DIR="$HOME/.local/share/operaciones-planner-mcp"
 ENTRY="$INSTALL_DIR/index.js"
-DOWNLOAD_URL="https://github.com/Kohwal/operaciones-planner/releases/latest/download/operaciones-planner-mcp.js"
 
 while [ $# -gt 0 ]; do
   case "$1" in
     --api-url) API_URL="$2"; shift 2 ;;
+    --bundle-url) BUNDLE_URL="$2"; shift 2 ;;
+    --email) LOGIN_EMAIL="$2"; shift 2 ;;
+    --password) LOGIN_PASSWORD="$2"; shift 2 ;;
     --uninstall) UNINSTALL=1; shift ;;
     *) echo "Opcion desconocida: $1"; exit 1 ;;
   esac
 done
+
+API_URL="${API_URL%/}"
+if [ -z "$BUNDLE_URL" ]; then
+  DOWNLOAD_URL="$API_URL/api/mcp/operaciones-planner-mcp.js"
+else
+  DOWNLOAD_URL="$BUNDLE_URL"
+fi
 
 if ! command -v node >/dev/null 2>&1; then
   echo "Falta Node.js. Instala la version LTS desde https://nodejs.org/es/download"
@@ -43,17 +56,34 @@ if [ "$UNINSTALL" -eq 1 ]; then
 fi
 
 mkdir -p "$INSTALL_DIR"
-echo "Descargando servidor MCP..."
-if command -v curl >/dev/null 2>&1; then
-  curl -fsSL "$DOWNLOAD_URL" -o "$ENTRY"
-else
-  wget -q "$DOWNLOAD_URL" -O "$ENTRY"
+echo "Descargando servidor MCP desde $DOWNLOAD_URL ..."
+
+case "$DOWNLOAD_URL" in
+  http://*|https://*)
+    if command -v curl >/dev/null 2>&1; then
+      curl -fsSL "$DOWNLOAD_URL" -o "$ENTRY"
+    else
+      wget -q "$DOWNLOAD_URL" -O "$ENTRY"
+    fi
+    ;;
+  *)
+    cp "$DOWNLOAD_URL" "$ENTRY"
+    ;;
+esac
+
+if ! head -n 3 "$ENTRY" | grep -q node; then
+  echo "El archivo descargado no parece un servidor MCP valido. Pide soporte de TI."
+  exit 1
 fi
 chmod +x "$ENTRY"
 
 echo ""
 echo "Iniciando sesion con tu cuenta de Operaciones Planner..."
-node "$ENTRY" --login --api-url "$API_URL"
+if [ -n "$LOGIN_EMAIL" ] && [ -n "$LOGIN_PASSWORD" ]; then
+  node "$ENTRY" --login --api-url "$API_URL" --email "$LOGIN_EMAIL" --password "$LOGIN_PASSWORD"
+else
+  node "$ENTRY" --login --api-url "$API_URL"
+fi
 
 echo ""
 echo "Listo. Cierra y vuelve a abrir Claude Desktop para usar el servidor 'operaciones-planner'."

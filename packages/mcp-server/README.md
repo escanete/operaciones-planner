@@ -37,14 +37,27 @@ Todas las operaciones respetan los permisos y roles de la cuenta que inició ses
 3. Escribe tu email y contraseña de Operaciones Planner cuando se pidan.
 4. Cierra y vuelve a abrir **Claude Desktop**.
 
-El script descarga la última versión del servidor, inicia sesión y registra el
-servidor en `claude_desktop_config.json` automáticamente (haciendo respaldo del
-archivo anterior).
+El script descarga la última versión del servidor **desde el propio backend de la
+empresa** (`{ApiUrl}/api/mcp/operaciones-planner-mcp.js`), inicia sesión y registra
+el servidor en `claude_desktop_config.json` automáticamente (haciendo respaldo del
+archivo anterior). No se necesita GitHub ni ninguna cuenta adicional.
 
 Si el servidor de la empresa tiene otra URL:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File install.ps1 -ApiUrl "http://192.168.25.7:3001"
+```
+
+Instalación desatendida (para TI, sin preguntas):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File install.ps1 -Email "usuario@empresa.cl" -Password "..."
+```
+
+Usar un bundle local en vez de descargarlo (por ejemplo si la red lo bloquea):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File install.ps1 -BundleUrl "C:\ruta\operaciones-planner-mcp.js"
 ```
 
 Desinstalar:
@@ -59,6 +72,8 @@ powershell -ExecutionPolicy Bypass -File install.ps1 -Uninstall
 bash install.sh
 # o con otra URL:
 bash install.sh --api-url http://192.168.25.7:3001
+# instalación desatendida:
+bash install.sh --email usuario@empresa.cl --password "..."
 ```
 
 ---
@@ -172,9 +187,13 @@ node "$env:LOCALAPPDATA\operaciones-planner-mcp\index.js" --logout
 - Tu rol no permite esa operación. Pide a un administrador que revise tu rol.
 
 **El instalador no descarga**
-- Requiere conexión a GitHub. Si la red de la empresa lo bloquea, pide a TI el
-  archivo `operaciones-planner-mcp.js` del release y guárdalo como
-  `%LOCALAPPDATA%\operaciones-planner-mcp\index.js`, luego ejecuta `--login`.
+- El bundle se descarga del backend de la empresa, no de GitHub. Comprueba que
+  `http://192.168.25.7:3001/api/mcp/operaciones-planner-mcp.js` abra o descargue
+  un archivo (y que `/api/health` responda).
+- Si el servidor aún no publica el MCP (responde 404 `MCP_NO_DISPONIBLE`), pide a
+  TI que reconstruya el backend con `docker compose up -d --build`.
+- Alternativa: pide a TI el archivo `operaciones-planner-mcp.js` y usa
+  `install.ps1 -BundleUrl "C:\ruta\operaciones-planner-mcp.js"`.
 
 ---
 
@@ -205,12 +224,24 @@ Variables de entorno útiles:
 
 ### Publicar una versión
 
-El workflow `.github/workflows/mcp-release.yml` compila y adjunta el bundle al
-release cuando se empuja un tag:
+El bundle que descargan los usuarios lo sirve el backend, así que se actualiza al
+desplegar:
+
+```bash
+# en el servidor 192.168.25.7
+git pull
+docker compose up -d --build
+```
+
+El `Dockerfile` del backend compila `packages/mcp-server` y copia el resultado a
+`/app/public/operaciones-planner-mcp.js`; la ruta pública es
+`/api/mcp/operaciones-planner-mcp.js`.
+
+Además, el workflow `.github/workflows/mcp-release.yml` publica el mismo bundle en
+GitHub Releases (útil para TI; el repositorio es privado, por lo que esa descarga
+requiere credenciales de GitHub):
 
 ```bash
 git tag mcp-v1.0.0
 git push origin mcp-v1.0.0
 ```
-
-El instalador descarga siempre `releases/latest/download/operaciones-planner-mcp.js`.

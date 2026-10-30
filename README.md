@@ -110,10 +110,40 @@ Esto configurará:
 | Clic en asignación → panel lateral con detalle | ✅ |
 | Crear/editar/eliminar asignaciones con validación de conflictos | ✅ |
 | Admin: recursos, proyectos, clientes, catálogos, usuarios | ✅ |
+| Asistente Claude Desktop (MCP local, lectura y escritura) | ✅ |
 | Auditoría de cambios | ✅ |
 | Drag & drop reordenar asignaciones | 🔜 próximamente |
 | Exportar a Excel/PDF | 🔜 próximamente |
 | Vista disponibilidad (heatmap) | 🔜 próximamente |
+
+---
+
+## 🤖 Claude Desktop (MCP local)
+
+Cada persona puede usar **su propia cuenta de Claude Desktop** para consultar y
+cargar datos en la plataforma (proyectos, actividades, tareas, subtareas,
+asignaciones, materiales y Excel) sin compartir contraseñas: el asistente corre
+en su PC y usa su propia sesión de Operaciones Planner.
+
+1. Instala **Node.js 20 o superior** y abre Claude Desktop una vez.
+2. Descarga `install.ps1` de este repositorio y ejecútalo:
+
+   ```powershell
+   powershell -ExecutionPolicy Bypass -File install.ps1
+   ```
+
+3. Escribe tu email y contraseña de la plataforma cuando se pidan.
+4. Reinicia Claude Desktop y pide, por ejemplo: «lista mis proyectos activos».
+
+El instalador descarga el servidor desde el propio backend
+(`http://192.168.25.7:3001/api/mcp/operaciones-planner-mcp.js`), así que **no
+necesita GitHub**; solo acceso de red al servidor de la empresa.
+
+Documentación completa (herramientas, seguridad y problemas frecuentes):
+[`packages/mcp-server/README.md`](packages/mcp-server/README.md).
+
+Al desplegar una versión nueva del MCP, se publica sola al reconstruir el backend
+en el servidor (`docker compose up -d --build`).
 
 ### "Backend no responde"
 ```powershell

@@ -16,12 +16,14 @@ RUN npm install -g pnpm@12 esbuild
 COPY pnpm-workspace.yaml pnpm-lock.yaml package.json ./
 COPY packages/shared/package.json packages/shared/
 COPY packages/backend/package.json packages/backend/
+COPY packages/mcp-server/package.json packages/mcp-server/
 
 RUN pnpm install --frozen-lockfile
 
 # ---- 2) Código fuente ----
 COPY packages/shared packages/shared
 COPY packages/backend packages/backend
+COPY packages/mcp-server packages/mcp-server
 
 # ---- 3) Generar cliente Prisma y empaquetar (esbuild) ----
 # El bundle inlines @operaciones-planner/shared (que apunta a TS fuente)
@@ -35,6 +37,13 @@ RUN cd packages/backend && \
       --outfile=seed.mjs && \
     esbuild scripts/reset-datos.ts --bundle --platform=node --format=esm --packages=external \
       --outfile=reset.mjs
+
+# ---- 4) Servidor MCP (bundle para Claude Desktop) ----
+# Se compila dentro de la imagen y el backend lo sirve en /api/mcp/...
+# Asi cada PC lo descarga del propio servidor de la empresa (sin GitHub).
+RUN pnpm --filter @operaciones-planner/mcp-server build && \
+    mkdir -p /app/public && \
+    cp packages/mcp-server/dist/index.js /app/public/operaciones-planner-mcp.js
 
 WORKDIR /app/packages/backend
 EXPOSE 3001

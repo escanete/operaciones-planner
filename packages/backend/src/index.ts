@@ -26,6 +26,7 @@ import { usuariosRoutes } from './routes/usuarios.js';
 import { auditoriaRoutes } from './routes/auditoria.js';
 import { reportesRoutes } from './routes/reportes.js';
 import { healthRoutes } from './routes/health.js';
+import { mcpRoutes } from './routes/mcp.js';
 
 const app = new Hono();
 
@@ -46,6 +47,8 @@ app.use('*', errorHandler());
 // ============================================
 app.route('/api/health', healthRoutes);
 app.route('/api/auth', authRoutes);
+// Descarga del servidor MCP: publica a proposito (solo entrega el cliente JS)
+app.route('/api/mcp', mcpRoutes);
 
 // ============================================
 // PROTECTED ROUTES (auth required)

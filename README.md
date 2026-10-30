@@ -126,9 +126,10 @@ asignaciones, materiales y Excel) sin compartir contraseñas: el asistente corre
 en su PC y usa su propia sesión de Operaciones Planner.
 
 1. Instala **Node.js 20 o superior** y abre Claude Desktop una vez.
-2. Descarga `install.ps1` de este repositorio y ejecútalo:
+2. Descarga el instalador desde el servidor de la empresa y ejecútalo:
 
    ```powershell
+   Invoke-WebRequest http://192.168.25.7:3001/api/mcp/install.ps1 -OutFile install.ps1
    powershell -ExecutionPolicy Bypass -File install.ps1
    ```
 

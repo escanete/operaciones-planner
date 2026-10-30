@@ -27,15 +27,15 @@ Todas las operaciones respetan los permisos y roles de la cuenta que inició ses
 
 ## Instalación (Windows)
 
-1. Descarga o copia el archivo `install/install.ps1` de este repositorio.
-2. Abre PowerShell en la carpeta del archivo y ejecuta:
+1. Descarga el instalador desde el servidor de la empresa y ejecútalo:
 
    ```powershell
+   Invoke-WebRequest http://192.168.25.7:3001/api/mcp/install.ps1 -OutFile install.ps1
    powershell -ExecutionPolicy Bypass -File install.ps1
    ```
 
-3. Escribe tu email y contraseña de Operaciones Planner cuando se pidan.
-4. Cierra y vuelve a abrir **Claude Desktop**.
+2. Escribe tu email y contraseña de Operaciones Planner cuando se pidan.
+3. Cierra y vuelve a abrir **Claude Desktop**.
 
 El script descarga la última versión del servidor **desde el propio backend de la
 empresa** (`{ApiUrl}/api/mcp/operaciones-planner-mcp.js`), inicia sesión y registra
@@ -69,6 +69,7 @@ powershell -ExecutionPolicy Bypass -File install.ps1 -Uninstall
 ## Instalación (macOS / Linux)
 
 ```bash
+curl -fsSL http://192.168.25.7:3001/api/mcp/install.sh -o install.sh
 bash install.sh
 # o con otra URL:
 bash install.sh --api-url http://192.168.25.7:3001

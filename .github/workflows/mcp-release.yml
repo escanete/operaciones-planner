@@ -48,11 +48,15 @@ jobs:
           body: |
             Servidor MCP local de Operaciones Planner para Claude Desktop.
 
-            Instalacion en Windows (PowerShell):
+            El instalador normal descarga el bundle desde el backend de la empresa,
+            no desde este release: `{servidor}/api/mcp/install.ps1`.
+
+            Windows (PowerShell):
             ```
-            powershell -ExecutionPolicy Bypass -File install/install.ps1
+            Invoke-WebRequest http://192.168.25.7:3001/api/mcp/install.ps1 -OutFile install.ps1
+            powershell -ExecutionPolicy Bypass -File install.ps1
             ```
             macOS / Linux:
             ```
-            bash install/install.sh
+            curl -fsSL http://192.168.25.7:3001/api/mcp/install.sh -o install.sh && bash install.sh
             ```

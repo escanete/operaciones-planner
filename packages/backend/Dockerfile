@@ -43,7 +43,9 @@ RUN cd packages/backend && \
 # Asi cada PC lo descarga del propio servidor de la empresa (sin GitHub).
 RUN pnpm --filter @operaciones-planner/mcp-server build && \
     mkdir -p /app/public && \
-    cp packages/mcp-server/dist/index.js /app/public/operaciones-planner-mcp.js
+    cp packages/mcp-server/dist/index.js /app/public/operaciones-planner-mcp.js && \
+    cp packages/mcp-server/install/install.ps1 /app/public/install.ps1 && \
+    cp packages/mcp-server/install/install.sh /app/public/install.sh
 
 WORKDIR /app/packages/backend
 EXPOSE 3001

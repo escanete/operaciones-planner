@@ -1,4 +1,4 @@
-﻿import { build } from "esbuild";
+import { build } from "esbuild";
 import { mkdirSync, rmSync } from "fs";
 import { dirname, join } from "path";
 import { fileURLToPath } from "url";

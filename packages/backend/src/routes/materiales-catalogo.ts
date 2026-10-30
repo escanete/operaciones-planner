@@ -17,6 +17,7 @@ const materialCatalogoSchema = z.object({
   nombre: z.string().min(1).max(100),
   categoria: z.string().max(50).optional().nullable(),
   unidadBase: z.string().max(20).optional().nullable(),
+  cantidadSugerida: z.number().positive().optional().nullable(),
   descripcion: z.string().max(500).optional().nullable(),
   recursoId: z.string().optional().nullable(), // vínculo con recurso-herramienta (inventario)
   activo: z.boolean().default(true),
@@ -66,6 +67,7 @@ materialesCatalogoRoutes.post('/', async (c) => {
       nombre: parsed.data.nombre,
       categoria: parsed.data.categoria ?? undefined,
       unidadBase: parsed.data.unidadBase ?? undefined,
+      cantidadSugerida: parsed.data.cantidadSugerida ?? undefined,
       descripcion: parsed.data.descripcion ?? undefined,
       recursoId: parsed.data.recursoId ?? undefined,
       activo: parsed.data.activo,
@@ -113,6 +115,9 @@ materialesCatalogoRoutes.put('/:id', async (c) => {
       ...(parsed.data.nombre !== undefined ? { nombre: parsed.data.nombre } : {}),
       ...(parsed.data.categoria !== undefined ? { categoria: parsed.data.categoria ?? undefined } : {}),
       ...(parsed.data.unidadBase !== undefined ? { unidadBase: parsed.data.unidadBase ?? undefined } : {}),
+      ...(parsed.data.cantidadSugerida !== undefined
+        ? { cantidadSugerida: parsed.data.cantidadSugerida ?? null }
+        : {}),
       ...(parsed.data.descripcion !== undefined ? { descripcion: parsed.data.descripcion ?? undefined } : {}),
       ...(parsed.data.recursoId !== undefined ? { recursoId: parsed.data.recursoId ?? undefined } : {}),
       ...(parsed.data.activo !== undefined ? { activo: parsed.data.activo } : {}),

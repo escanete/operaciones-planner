@@ -215,18 +215,19 @@ model AsignacionEtiqueta {
 // con unidad base y vínculo opcional a un recurso-herramienta del sistema.
 // Las instancias por proyecto (Material) referencian al catálogo.
 model MaterialCatalogo {
-  id          String     @id @default(cuid())
-  nombre      String     @unique
-  categoria   String?
-  unidadBase  String? // "un", "mt", "kg" — precarga la unidad al usarlo en un proyecto
-  descripcion String?
+  id               String     @id @default(cuid())
+  nombre           String     @unique
+  categoria        String?
+  unidadBase       String? // "un", "mt", "kg" - precarga la unidad al usarlo en un proyecto
+  cantidadSugerida Float? // cantidad típica que se propone al agregarlo a un proyecto
+  descripcion      String?
   // Vínculo con inventario: recurso tipo HERRAMIENTA/EQUIPO_TECNICO asociado
-  recursoId   String?
-  recurso     Recurso?   @relation("MaterialCatalogoActivo", fields: [recursoId], references: [id], onDelete: SetNull)
-  activo      Boolean    @default(true)
-  createdAt   DateTime   @default(now())
-  updatedAt   DateTime   @updatedAt
-  materiales  Material[] // instancias de este ítem en los proyectos
+  recursoId        String?
+  recurso          Recurso?   @relation("MaterialCatalogoActivo", fields: [recursoId], references: [id], onDelete: SetNull)
+  activo           Boolean    @default(true)
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
+  materiales       Material[] // instancias de este ítem en los proyectos
 
   @@map("material_catalogos")
 }

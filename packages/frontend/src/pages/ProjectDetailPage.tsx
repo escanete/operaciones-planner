@@ -62,6 +62,7 @@ import {
   useUpdateProyectoAvance,
 } from '@/hooks/useApi';
 import { cn } from '@/lib/utils';
+import { admiteDecimales, etiquetaUnidad, getUnidad, simboloUnidad, UNIDADES_MEDIDA } from '@/lib/unidades';
 import type {
   Actividad,
   Subtarea,
@@ -1141,7 +1142,7 @@ const CATEGORIAS_SUGERIDAS = [
   'Otro',
 ];
 
-const UNIDADES_SUGERIDAS = ['un', 'mt', 'kg', 'caja', 'rollo', 'par', 'set'];
+const UNIDAD_PERSONALIZADA = '__otra_unidad__';
 
 const ESTADO_MATERIAL_LABEL: Record<MaterialEstado, string> = {
   PENDIENTE: 'Pendiente',
@@ -1272,7 +1273,10 @@ function MaterialesTab({ proyectoId, canManage }: { proyectoId: string; canManag
                   )}
                 </div>
                 <span className="text-sm tabular-nums">
-                  {m.cantidad} <span className="text-xs text-muted-foreground">{m.unidad ?? ''}</span>
+                  {m.cantidad}{' '}
+                  {m.unidad && (
+                    <span className="text-xs text-muted-foreground">{simboloUnidad(m.unidad)}</span>
+                  )}
                 </span>
                 <EstadoMaterialBadge estado={m.estado} />
                 {canManage ? (
@@ -1333,10 +1337,18 @@ function MaterialDialog({
   const { data: catalogoMateriales } = useMaterialesCatalogo(true);
   const isEdit = !!material;
 
+  const unidadInicial = material?.unidad?.trim() ?? '';
+  const unidadInicialConocida = getUnidad(unidadInicial);
+
   const [nombre, setNombre] = useState(material?.nombre ?? '');
   const [categoria, setCategoria] = useState(material?.categoria ?? '');
   const [cantidad, setCantidad] = useState(String(material?.cantidad ?? 1));
-  const [unidad, setUnidad] = useState(material?.unidad ?? '');
+  const [unidadSeleccionada, setUnidadSeleccionada] = useState<string>(
+    unidadInicialConocida ? unidadInicialConocida.valor : unidadInicial ? UNIDAD_PERSONALIZADA : 'un'
+  );
+  const [unidadPersonalizada, setUnidadPersonalizada] = useState(
+    unidadInicial && !unidadInicialConocida ? unidadInicial : ''
+  );
   const [estado, setEstado] = useState<MaterialEstado>(material?.estado ?? 'PENDIENTE');
   const [descripcion, setDescripcion] = useState(material?.descripcion ?? '');
   const [notas, setNotas] = useState(material?.notas ?? '');
@@ -1344,7 +1356,25 @@ function MaterialDialog({
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
-  // Al elegir un ítem del catálogo se precargan nombre/categoría/unidad
+  // Unidad efectiva: la del selector o la escrita a mano cuando es personalizada
+  const unidad =
+    unidadSeleccionada === UNIDAD_PERSONALIZADA
+      ? unidadPersonalizada.trim()
+      : unidadSeleccionada;
+  const permiteDecimales = admiteDecimales(unidad);
+
+  const aplicarUnidad = (valor: string) => {
+    const conocida = getUnidad(valor);
+    if (conocida) {
+      setUnidadSeleccionada(conocida.valor);
+      setUnidadPersonalizada('');
+    } else if (valor.trim()) {
+      setUnidadSeleccionada(UNIDAD_PERSONALIZADA);
+      setUnidadPersonalizada(valor.trim());
+    }
+  };
+
+  // Al elegir un ítem del catálogo se precargan nombre/categoría/unidad/cantidad
   const handlePickCatalogo = (id: string) => {
     setCatalogoId(id);
     if (id === 'none') return;
@@ -1352,7 +1382,10 @@ function MaterialDialog({
     if (!item) return;
     setNombre(item.nombre);
     if (item.categoria) setCategoria(item.categoria);
-    if (item.unidadBase) setUnidad(item.unidadBase);
+    if (item.unidadBase) aplicarUnidad(item.unidadBase);
+    if (item.cantidadSugerida && item.cantidadSugerida > 0) {
+      setCantidad(String(item.cantidadSugerida));
+    }
   };
 
   const handleSubmit = async () => {
@@ -1364,6 +1397,10 @@ function MaterialDialog({
     const cant = parseFloat(cantidad);
     if (Number.isNaN(cant) || cant <= 0) {
       setError('La cantidad debe ser un número mayor que 0');
+      return;
+    }
+    if (!permiteDecimales && !Number.isInteger(cant)) {
+      setError(`La unidad "${simboloUnidad(unidad)}" solo admite cantidades enteras`);
       return;
     }
     setSaving(true);
@@ -1420,12 +1457,14 @@ function MaterialDialog({
                       {c.nombre}
                       {c.categoria ? ` · ${c.categoria}` : ''}
                       {c.unidadBase ? ` (${c.unidadBase})` : ''}
+                      {c.cantidadSugerida ? ` — ${c.cantidadSugerida} ${simboloUnidad(c.unidadBase)}` : ''}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
               <p className="text-xs text-muted-foreground">
-                Al elegir un ítem se completan nombre, categoría y unidad (editables)
+                Al elegir un ítem se completan nombre, categoría, unidad y cantidad de referencia
+                (todo editable)
               </p>
             </div>
           )}
@@ -1476,33 +1515,78 @@ function MaterialDialog({
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="mat-cantidad">Cantidad</Label>
-              <Input
-                id="mat-cantidad"
-                type="number"
-                min="0"
-                step="any"
-                value={cantidad}
-                onChange={(e) => setCantidad(e.target.value)}
-              />
+          <div className="space-y-2">
+            <Label htmlFor="mat-cantidad">Cantidad y unidad de medida</Label>
+            <div className="flex gap-2">
+              <div className="relative flex-1">
+                <Input
+                  id="mat-cantidad"
+                  type="number"
+                  inputMode="decimal"
+                  min="0"
+                  step={permiteDecimales ? '0.01' : '1'}
+                  className="pr-14"
+                  value={cantidad}
+                  onChange={(e) => setCantidad(e.target.value)}
+                />
+                <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-xs font-medium text-muted-foreground">
+                  {simboloUnidad(unidad)}
+                </span>
+              </div>
+              <Select
+                value={unidadSeleccionada}
+                onValueChange={(v) => {
+                  setUnidadSeleccionada(v);
+                  if (v !== UNIDAD_PERSONALIZADA) setUnidadPersonalizada('');
+                }}
+              >
+                <SelectTrigger className="w-[180px]">
+                  <SelectValue placeholder="Unidad" />
+                </SelectTrigger>
+                <SelectContent>
+                  {UNIDADES_MEDIDA.map((u) => (
+                    <SelectItem key={u.valor} value={u.valor}>
+                      {u.etiqueta}
+                    </SelectItem>
+                  ))}
+                  <SelectItem value={UNIDAD_PERSONALIZADA}>Otra unidad…</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="mat-unidad">Unidad</Label>
+
+            {unidadSeleccionada === UNIDAD_PERSONALIZADA && (
               <Input
-                id="mat-unidad"
-                list="unidades-material"
-                value={unidad}
-                onChange={(e) => setUnidad(e.target.value)}
-                placeholder="un, mt, kg..."
+                value={unidadPersonalizada}
+                onChange={(e) => setUnidadPersonalizada(e.target.value)}
+                placeholder="Escribe la unidad (ej: tramo, rollo, bolsa…)"
               />
-              <datalist id="unidades-material">
-                {UNIDADES_SUGERIDAS.map((u) => (
-                  <option key={u} value={u} />
-                ))}
-              </datalist>
+            )}
+
+            <div className="flex flex-wrap items-center gap-1">
+              <span className="mr-1 text-xs text-muted-foreground">Cantidades rápidas:</span>
+              {[1, 5, 10, 25, 50, 100].map((n) => (
+                <Button
+                  key={n}
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-6 px-2 text-[11px]"
+                  onClick={() => setCantidad(String(n))}
+                >
+                  {n}
+                </Button>
+              ))}
             </div>
+
+            <p className="text-xs text-muted-foreground">
+              {unidad
+                ? `${etiquetaUnidad(unidad)} · ${permiteDecimales ? 'admite decimales' : 'solo enteros'}`
+                : 'Selecciona una unidad de medida'}
+              {' · '}
+              <span className="font-medium text-foreground">
+                {cantidad || 0} {simboloUnidad(unidad)}
+              </span>
+            </p>
           </div>
 
           <div className="space-y-2">

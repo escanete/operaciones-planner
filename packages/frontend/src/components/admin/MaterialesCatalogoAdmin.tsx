@@ -14,6 +14,7 @@ import {
   useRecursos,
 } from '@/hooks/useApi';
 import type { MaterialCatalogo } from '@operaciones-planner/shared';
+import { simboloUnidad, UNIDADES_MEDIDA } from '@/lib/unidades';
 
 // ============================================
 // ADMIN CATÁLOGO DE MATERIALES
@@ -23,7 +24,7 @@ import type { MaterialCatalogo } from '@operaciones-planner/shared';
 // - Eliminar: solo SUPER_ADMIN (materiales de proyectos quedan libres)
 // ============================================
 
-const UNIDADES_SUGERIDAS = ['un', 'mt', 'kg', 'lt', 'caja', 'rollo', 'par'];
+const UNIDADES_SUGERIDAS = UNIDADES_MEDIDA.map((u) => ({ value: u.valor, label: u.etiqueta }));
 
 export function MaterialesCatalogoAdmin() {
   const { user } = useAuthStore();
@@ -72,10 +73,19 @@ export function MaterialesCatalogoAdmin() {
     },
     {
       name: 'unidadBase',
-      label: 'Unidad base',
+      label: 'Unidad de medida',
       type: 'select',
-      options: UNIDADES_SUGERIDAS.map((u) => ({ value: u, label: u })),
-      helperText: 'Unidad con la que normalmente se pide este material (opcional)',
+      options: UNIDADES_SUGERIDAS,
+      helperText:
+        'Unidad con la que se pide este material. Las unidades como kg, mt o lt admiten decimales; un, caja o rollo solo enteros.',
+    },
+    {
+      name: 'cantidadSugerida',
+      label: 'Cantidad de referencia (opcional)',
+      type: 'number',
+      placeholder: 'Ej: 250',
+      helperText:
+        'Cantidad típica que se propone al agregar el material a un proyecto (ej: 250 kg). Se puede ajustar en cada proyecto.',
     },
     {
       name: 'recursoId',
@@ -114,8 +124,8 @@ export function MaterialesCatalogoAdmin() {
             Catálogo de materiales
           </CardTitle>
           <p className="text-sm text-muted-foreground">
-            Ítems reutilizables para los materiales de los proyectos: nombre, categoría y unidad base,
-            con vínculo opcional a un activo del catálogo de recursos
+            Ítems reutilizables para los materiales de los proyectos: nombre, categoría, unidad de
+            medida y cantidad de referencia, con vínculo opcional a un activo del catálogo de recursos
           </p>
         </div>
         {canManage && (
@@ -134,7 +144,8 @@ export function MaterialesCatalogoAdmin() {
               <TableRow>
                 <TableHead>Material</TableHead>
                 <TableHead>Categoría</TableHead>
-                <TableHead>Unidad base</TableHead>
+                <TableHead>Unidad</TableHead>
+                <TableHead>Cantidad ref.</TableHead>
                 <TableHead>Activo vinculado</TableHead>
                 <TableHead>Estado</TableHead>
                 <TableHead className="text-right">Acciones</TableHead>
@@ -157,6 +168,18 @@ export function MaterialesCatalogoAdmin() {
                     )}
                   </TableCell>
                   <TableCell className="text-sm">{m.unidadBase ?? '—'}</TableCell>
+                  <TableCell className="text-sm tabular-nums">
+                    {m.cantidadSugerida !== undefined && m.cantidadSugerida !== null ? (
+                      <>
+                        {m.cantidadSugerida}{' '}
+                        <span className="text-xs text-muted-foreground">
+                          {simboloUnidad(m.unidadBase)}
+                        </span>
+                      </>
+                    ) : (
+                      <span className="text-muted-foreground">—</span>
+                    )}
+                  </TableCell>
                   <TableCell className="text-sm">{nombreRecurso(m) ?? '—'}</TableCell>
                   <TableCell>
                     <Badge variant={m.activo ? 'default' : 'outline'}>
@@ -194,7 +217,7 @@ export function MaterialesCatalogoAdmin() {
               ))}
               {items?.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={6} className="py-8 text-center text-sm text-muted-foreground">
+                  <TableCell colSpan={7} className="py-8 text-center text-sm text-muted-foreground">
                     No hay materiales en el catálogo — crea el primero (ej: Cable coaxial RG6)
                   </TableCell>
                 </TableRow>
@@ -208,7 +231,7 @@ export function MaterialesCatalogoAdmin() {
         open={dialogOpen}
         onOpenChange={setDialogOpen}
         title={editing ? `Editar material "${editing.nombre}"` : 'Nuevo material'}
-        description="Los ítems del catálogo precargan nombre, categoría y unidad al agregar materiales a un proyecto."
+        description="Define nombre, unidad de medida y cantidad de referencia; al agregar el material a un proyecto se proponen esos valores y puedes ajustarlos."
         fields={fields}
         initialData={editing ? (editing as unknown as Record<string, unknown>) : null}
         onSubmit={handleSubmit}

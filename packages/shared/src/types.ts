@@ -504,6 +504,7 @@ export interface MaterialCatalogo {
   nombre: string;
   categoria?: string;
   unidadBase?: string;
+  cantidadSugerida?: number; // cantidad típica que se propone al usarlo en un proyecto
   descripcion?: string;
   recursoId?: string; // vínculo con inventario (recurso HERRAMIENTA/EQUIPO_TECNICO)
   activo: boolean;

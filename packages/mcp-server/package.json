@@ -1,0 +1,36 @@
+﻿{
+  "name": "@operaciones-planner/mcp-server",
+  "version": "1.0.0",
+  "description": "Servidor MCP local para Operaciones Planner (Claude Desktop)",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "operaciones-planner-mcp": "dist/index.js"
+  },
+  "files": [
+    "dist/index.js",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "tsx src/index.ts",
+    "build": "tsx build.ts",
+    "typecheck": "tsc --noEmit",
+    "login": "node dist/index.js --login",
+    "install-claude": "node dist/index.js --install",
+    "status": "node dist/index.js --status"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.20.0",
+    "xlsx": "^0.18.5",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^22.5.0",
+    "esbuild": "^0.23.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.5.0"
+  }
+}

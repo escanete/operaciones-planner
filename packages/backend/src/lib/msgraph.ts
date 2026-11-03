@@ -136,8 +136,25 @@ async function enviarToken(
 async function solicitarToken(extra: Record<string, string>): Promise<RespuestaToken> {
   const primero = await enviarToken(extra, true);
   if (primero.ok && primero.body?.access_token) return primero;
-  if (!env.MS_GRAPH_CLIENT_SECRET || !esErrorDeCredencial(primero.body)) return primero;
-  return enviarToken(extra, false);
+
+  const puedeReintentar = Boolean(env.MS_GRAPH_CLIENT_SECRET) && esErrorDeCredencial(primero.body);
+  const respuesta = puedeReintentar ? await enviarToken(extra, false) : primero;
+
+  // Deja rastro en los logs del servidor sin exponer el secreto.
+  const error = String(respuesta.body?.error ?? '');
+  if (!respuesta.ok && error !== 'authorization_pending' && error !== 'slow_down') {
+    console.warn('[msgraph] Microsoft rechazó la solicitud de token', {
+      grant: extra.grant_type,
+      secretoConfigurado: Boolean(env.MS_GRAPH_CLIENT_SECRET),
+      secretoLargo: env.MS_GRAPH_CLIENT_SECRET.length,
+      reintentoSinSecreto: puedeReintentar,
+      status: respuesta.status,
+      error,
+      codigos: respuesta.body?.error_codes,
+    });
+  }
+
+  return respuesta;
 }
 
 const AYUDA_CREDENCIAL =

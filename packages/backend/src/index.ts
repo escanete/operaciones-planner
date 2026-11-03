@@ -5,6 +5,7 @@ import { logger } from 'hono/logger';
 import { env } from './lib/env.js';
 import { auth } from './lib/auth.js';
 import { errorHandler } from './middlewares/error-handler.js';
+import { vincularUsuarioPorEmail } from './lib/vinculo-usuario.js';
 
 import { authRoutes } from './routes/auth.js';
 import { departamentosRoutes } from './routes/departamentos.js';
@@ -65,7 +66,17 @@ api.use('*', async (c, next) => {
   if (!session?.user) {
     return c.json({ error: 'Unauthorized', code: 'AUTH_REQUIRED' }, 401);
   }
-  (c as any).set('user', session.user);
+
+  // Si la cuenta de Office coincide con una ficha de persona, se vincula
+  // sola: así el usuario ve sus asignaciones y recibe sus eventos en Outlook
+  // sin que un administrador tenga que hacerlo a mano.
+  const usuarioSesion = session.user as typeof session.user & { recursoId?: string | null };
+  if (!usuarioSesion.recursoId) {
+    const recursoId = await vincularUsuarioPorEmail(usuarioSesion.id, usuarioSesion.email);
+    if (recursoId) usuarioSesion.recursoId = recursoId;
+  }
+
+  (c as any).set('user', usuarioSesion);
   (c as any).set('session', session.session);
   await next();
 });

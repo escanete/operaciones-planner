@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import { prisma } from '../lib/db.js';
 import { getUser } from '../types/index.js';
+import { sincronizarAsignacion } from '../lib/calendar-sync.js';
 import type { ConflictInfo, ConflictCheckResult } from '@operaciones-planner/shared';
 
 const asignacionesRoutes = new Hono();
@@ -200,6 +201,10 @@ asignacionesRoutes.post('/', async (c) => {
     await setEtiquetasAsignacion(asignacion.id, etiquetaIds);
   }
 
+  // Refleja la asignación en el calendario de Outlook del responsable.
+  // Si falla (sin conexión, sin permiso), no bloquea la planificación.
+  await sincronizarAsignacion(asignacion.id);
+
   return c.json(
     {
       ...asignacion,
@@ -227,7 +232,7 @@ asignacionesRoutes.post('/bulk', async (c) => {
   for (let i = 0; i < validated.length; i++) {
     try {
       const data = validated[i];
-      await prisma.asignacion.create({
+      const creada = await prisma.asignacion.create({
         data: {
           ...data,
           fechaInicio: new Date(data.fechaInicio),
@@ -235,6 +240,7 @@ asignacionesRoutes.post('/bulk', async (c) => {
           creadoPorId: user.id,
         },
       });
+      await sincronizarAsignacion(creada.id);
       resultados.created++;
     } catch (error) {
       resultados.errors.push({ index: i, error: String(error) });
@@ -299,6 +305,9 @@ asignacionesRoutes.put('/:id', async (c) => {
     await setEtiquetasAsignacion(id, etiquetaIds as string[]);
   }
 
+  // Actualiza (o elimina, si quedó CANCELADA) el evento de Outlook
+  await sincronizarAsignacion(id);
+
   return c.json({
     ...asignacion,
     etiquetas: asignacion.etiquetas.map((e) => ({
@@ -360,6 +369,8 @@ asignacionesRoutes.patch('/:id/mover', async (c) => {
     },
   });
 
+  await sincronizarAsignacion(id);
+
   return c.json(asignacion);
 });
 
@@ -400,6 +411,8 @@ asignacionesRoutes.patch('/:id/extender', async (c) => {
     },
   });
 
+  await sincronizarAsignacion(id);
+
   return c.json(asignacion);
 });
 
@@ -415,6 +428,9 @@ asignacionesRoutes.delete('/:id', async (c) => {
     where: { id },
     data: { estado: 'CANCELADA' },
   });
+
+  // Quita el evento del calendario del responsable
+  await sincronizarAsignacion(id);
 
   return c.json({ success: true });
 });

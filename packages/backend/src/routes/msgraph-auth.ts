@@ -19,6 +19,12 @@ import {
   iniciarDeviceCode,
   resolveSiteAndDrive,
 } from '../lib/msgraph.js';
+import {
+  desconectarUsuario,
+  estadoCalendarioUsuario,
+  guardarTokenUsuario,
+} from '../lib/graph-tokens.js';
+import { vincularUsuarioPorEmail } from '../lib/vinculo-usuario.js';
 
 const msgraphRoutes = new Hono();
 
@@ -130,6 +136,23 @@ msgraphRoutes.get('/callback', async (c) => {
       );
     }
 
+    // Guarda también el token por usuario: es el que usa el servidor para
+    // crear los eventos de las asignaciones en el calendario de Outlook.
+    const session = await auth.api.getSession({ headers: c.req.raw.headers });
+    if (session?.user) {
+      let cuenta = null;
+      try {
+        cuenta = await getGraphMe(resultado.accessToken);
+      } catch (err) {
+        console.warn('No se pudo leer el perfil de Microsoft:', err);
+      }
+      await guardarTokenUsuario(session.user.id, resultado, cuenta);
+      await vincularUsuarioPorEmail(
+        session.user.id,
+        cuenta?.mail ?? cuenta?.userPrincipalName ?? session.user.email
+      );
+    }
+
     return c.redirect(urlFrontend(destino, { sharepoint: 'conectado' }));
   } catch (err) {
     console.error('Falló el intercambio de código de Microsoft Graph:', err);
@@ -233,7 +256,24 @@ msgraphRoutes.get('/device/estado', async (c) => {
       }
 
       guardarRefreshToken(c, resultado.token.refreshToken);
-      return c.json({ estado: 'listo' });
+
+      // Token persistente por usuario para la sincronización del calendario
+      let cuenta = null;
+      try {
+        cuenta = await getGraphMe(resultado.token.accessToken);
+      } catch (err) {
+        console.warn('No se pudo leer el perfil de Microsoft:', err);
+      }
+      await guardarTokenUsuario(session.user.id, resultado.token, cuenta);
+      await vincularUsuarioPorEmail(
+        session.user.id,
+        cuenta?.mail ?? cuenta?.userPrincipalName ?? session.user.email
+      );
+
+      return c.json({
+        estado: 'listo',
+        cuenta: cuenta?.mail ?? cuenta?.userPrincipalName ?? null,
+      });
     }
 
     if (resultado.estado === 'pendiente') {
@@ -267,6 +307,7 @@ msgraphRoutes.get('/estado', async (c) => {
       configurado: false,
       conectado: false,
       metodo: env.MS_GRAPH_AUTH_MODE,
+      calendario: await estadoCalendarioUsuario(session.user.id),
       detalle:
         'Faltan MS_GRAPH_CLIENT_ID, MS_GRAPH_CLIENT_SECRET o MS_GRAPH_TENANT_ID en el entorno del backend.',
     });
@@ -284,6 +325,7 @@ msgraphRoutes.get('/estado', async (c) => {
       configurado: true,
       conectado: false,
       metodo: env.MS_GRAPH_AUTH_MODE,
+      calendario: await estadoCalendarioUsuario(session.user.id),
     });
   }
 
@@ -295,6 +337,7 @@ msgraphRoutes.get('/estado', async (c) => {
       conectado: true,
       metodo: env.MS_GRAPH_AUTH_MODE,
       usuario,
+      calendario: await estadoCalendarioUsuario(session.user.id),
       sitio: {
         nombre: sitio.driveName,
         webUrl: sitio.driveWebUrl,
@@ -341,8 +384,10 @@ msgraphRoutes.get('/diagnostico', async (c) => {
 /* ============================================================
    POST /api/auth/msgraph/logout
    ============================================================ */
-msgraphRoutes.post('/logout', (c) => {
+msgraphRoutes.post('/logout', async (c) => {
+  const session = await auth.api.getSession({ headers: c.req.raw.headers });
   limpiarSesionGraph(c);
+  if (session?.user) await desconectarUsuario(session.user.id);
   return c.json({ ok: true });
 });
 

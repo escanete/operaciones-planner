@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import { prisma } from '../lib/db.js';
 import { getUser } from '../types/index.js';
+import { vincularUsuariosDeRecurso } from '../lib/vinculo-usuario.js';
 
 const recursosRoutes = new Hono();
 
@@ -107,6 +108,9 @@ recursosRoutes.post('/', async (c) => {
     include: { departamento: true, equipo: true, cargo: true },
   });
 
+  // Si ya existe un usuario con ese email, queda vinculado automáticamente
+  if (recurso.email) await vincularUsuariosDeRecurso(recurso.id);
+
   return c.json(recurso, 201);
 });
 
@@ -130,6 +134,8 @@ recursosRoutes.put('/:id', async (c) => {
     },
     include: { departamento: true, equipo: true, cargo: true },
   });
+
+  if (recurso.email) await vincularUsuariosDeRecurso(recurso.id);
 
   return c.json(recurso);
 });

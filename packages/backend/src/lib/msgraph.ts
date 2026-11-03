@@ -58,7 +58,13 @@ export interface TokenResultado {
 }
 
 export function getScopes(): string[] {
-  return env.MS_GRAPH_SCOPES.split(/[\s,]+/).filter(Boolean);
+  const scopes = env.MS_GRAPH_SCOPES.split(/[\s,]+/).filter(Boolean);
+  // El calendario de Outlook es parte de la integración, aunque el servidor
+  // tenga configurado MS_GRAPH_SCOPES sin ese permiso.
+  if (!scopes.some((s) => s.toLowerCase().endsWith('/calendars.readwrite'))) {
+    scopes.push('https://graph.microsoft.com/Calendars.ReadWrite');
+  }
+  return [...new Set(scopes)];
 }
 
 function authorityBase(): string {

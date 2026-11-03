@@ -400,6 +400,16 @@ model Asignacion {
   version   Int                  @default(1)
   etiquetas AsignacionEtiqueta[]
 
+  // Sincronización con el calendario de Outlook del recurso asignado.
+  // El evento se crea en el calendario del usuario de la app que tiene
+  // vinculado este recurso (User.recursoId = Asignacion.recursoId).
+  graphEventId      String?
+  graphEventWebLink String?
+  graphEventUserId  String? // usuario dueño del calendario donde vive el evento
+  graphSyncEstado   String? // PENDIENTE, SINCRONIZADO, ERROR, OMITIDO
+  graphSyncError    String?
+  graphSyncAt       DateTime?
+
   @@index([proyectoId, fechaInicio, fechaFin])
   @@index([recursoId, fechaInicio, fechaFin])
   @@index([fechaInicio, fechaFin])
@@ -525,9 +535,32 @@ model User {
   preferencias        UserPreferencias?
   sessions            Session[]
   accounts            Account[]
+  graphToken          GraphToken?
 
   @@index([rol, activo])
   @@map("users")
+}
+
+// Token de Microsoft Graph del usuario, para sincronizar su calendario de
+// Outlook aun cuando no esté conectado al navegador. El refresh token se
+// guarda cifrado (AES-256-GCM) con BETTER_AUTH_SECRET.
+model GraphToken {
+  id                  String    @id @default(cuid())
+  userId              String    @unique
+  user                User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  refreshTokenCifrado String
+  accessToken         String?
+  accessTokenExpiraAt DateTime?
+  scope               String?
+  cuentaMicrosoft     String? // UPN o mail de la cuenta conectada
+  cuentaMicrosoftId   String?
+  calendarioActivo    Boolean   @default(true)
+  ultimaSyncAt        DateTime?
+  ultimoError         String?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  @@map("graph_tokens")
 }
 
 model Session {

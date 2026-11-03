@@ -3,6 +3,7 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuthStore } from '@/stores/authStore';
 import { Layout } from '@/components/layout/Layout';
 import { LoginPage } from '@/pages/LoginPage';
+import { MiAgendaPage } from '@/pages/MiAgendaPage';
 import { PlanningPage } from '@/pages/PlanningPage';
 import { ProyectosPage } from '@/pages/ProyectosPage';
 import { ProjectDetailPage } from '@/pages/ProjectDetailPage';
@@ -76,6 +77,7 @@ export function App() {
         <Route path="proyectos/:proyectoId" element={<ProjectDetailPage />} />
         <Route path="reportes" element={<ReportesPage />} />
         <Route path="perfil" element={<PerfilPage />} />
+        <Route path="mi-agenda" element={<MiAgendaPage />} />
         <Route path="configuracion" element={<ConfiguracionPage />} />
         <Route path="admin" element={
           <ProtectedRoute requiredRole={['SUPER_ADMIN', 'ADMIN_DEPTO']}>

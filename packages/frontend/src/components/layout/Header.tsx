@@ -10,7 +10,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { CalendarDays, LogOut, Settings, User } from 'lucide-react';
+import { CalendarDays, LogOut, Settings, User, CalendarCheck } from 'lucide-react';
 import { usePlanningStore } from '@/stores/planningStore';
 
 export function Header() {
@@ -90,6 +90,10 @@ export function Header() {
               <DropdownMenuItem onClick={() => navigate('/perfil')}>
                 <User className="mr-2 h-4 w-4" />
                 <span>Mi Perfil</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => navigate('/mi-agenda')}>
+                <CalendarCheck className="mr-2 h-4 w-4" />
+                <span>Mi Agenda</span>
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => navigate('/configuracion')}>
                 <Settings className="mr-2 h-4 w-4" />

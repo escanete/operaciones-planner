@@ -4,6 +4,7 @@ import { deleteCookie, getCookie, setCookie } from 'hono/cookie';
 import type { CookieOptions } from 'hono/utils/cookie';
 import { env } from './env.js';
 import { refreshAccessToken } from './msgraph.js';
+import { getAccessTokenUsuario, obtenerTokenUsuario } from './graph-tokens.js';
 
 /* ============================================================
    Sesión de Microsoft Graph por usuario
@@ -93,6 +94,32 @@ function errorSesion(mensaje: string, requiereConexion: boolean): GraphSessionEr
  * Lanza GraphSessionError si el refresh token ya no es válido.
  */
 export async function getGraphAccessToken(c: Context): Promise<string | null> {
+  // Si la petición viene de la API protegida, el token persistente del
+  // usuario es la fuente de verdad (lo comparte el calendario de Outlook).
+  let userId: string | null = null;
+  try {
+    const usuario = (c as unknown as { get: (clave: string) => { id?: string } | undefined }).get('user');
+    userId = usuario?.id ?? null;
+  } catch {
+    userId = null;
+  }
+
+  if (userId) {
+    try {
+      const tokenDb = await getAccessTokenUsuario(userId);
+      if (tokenDb) {
+        // Mantiene la cookie alineada con el refresh token rotado en la BD
+        const guardado = await obtenerTokenUsuario(userId);
+        if (guardado?.refreshToken && guardado.refreshToken !== getCookie(c, RT_COOKIE)) {
+          guardarRefreshToken(c, guardado.refreshToken);
+        }
+        return tokenDb;
+      }
+    } catch (err) {
+      console.warn('[msgraph] No se pudo usar el token persistente, se intenta la cookie:', err);
+    }
+  }
+
   const refreshToken = getCookie(c, RT_COOKIE);
   if (!refreshToken) return null;
 

@@ -787,11 +787,32 @@ export function useValidarConflicto() {
 }
 
 // ============================================
-// EXPORTACIONES
+// MICROSOFT GRAPH / SHAREPOINT / OUTLOOK CALENDAR
 // ============================================
-export function useExportExcel() {
-  return useMutation({
-    mutationFn: (data: { tipo: string; filtros?: Record<string, unknown>; columnas?: string[] }) =>
-      api.post<{ downloadUrl: string }>('/api/export/excel', data),
+
+export interface GraphEstado {
+  configurado: boolean;
+  conectado: boolean;
+  metodo?: 'device' | 'redirect';
+  detalle?: string;
+  error?: string;
+  usuario?: { displayName: string | null; mail: string | null; userPrincipalName: string };
+  sitio?: { nombre: string; webUrl: string; siteWebUrl: string };
+  calendario?: {
+    conectado: boolean;
+    activo: boolean;
+    cuenta: string | null;
+    ultimaSyncAt: string | null;
+    ultimoError: string | null;
+    actualizadoAt: string | null;
+    conPermisoCalendario: boolean;
+  };
+}
+
+export function useGraphEstado() {
+  return useQuery({
+    queryKey: ['graph-estado'],
+    queryFn: () => api.get<GraphEstado>('/api/auth/msgraph/estado'),
+    staleTime: 1000 * 60, // 1 minute
   });
 }

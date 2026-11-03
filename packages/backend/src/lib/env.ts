@@ -53,7 +53,11 @@ export const env = {
   /** Permisos delegados solicitados al usuario */
   MS_GRAPH_SCOPES:
     process.env.MS_GRAPH_SCOPES ??
-    'https://graph.microsoft.com/Files.ReadWrite.All https://graph.microsoft.com/Sites.ReadWrite.All https://graph.microsoft.com/User.Read offline_access',
+    'https://graph.microsoft.com/Files.ReadWrite.All https://graph.microsoft.com/Sites.ReadWrite.All https://graph.microsoft.com/Calendars.ReadWrite https://graph.microsoft.com/User.Read offline_access',
+  /** Zona horaria con la que se crean los eventos de Outlook */
+  MS_GRAPH_TIMEZONE: process.env.MS_GRAPH_TIMEZONE ?? 'America/Santiago',
+  /** Sincronización automática de asignaciones con Outlook */
+  MS_GRAPH_CALENDAR_SYNC: process.env.MS_GRAPH_CALENDAR_SYNC !== 'false',
   /**
    * Cómo conecta cada usuario su cuenta de Microsoft:
    * - device: código de dispositivo (funciona con HTTP en red interna, sin redirect URI)

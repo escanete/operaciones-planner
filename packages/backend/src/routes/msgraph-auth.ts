@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { deleteCookie, getCookie, setCookie } from 'hono/cookie';
 import { auth } from '../lib/auth.js';
-import { graphConfigurado } from '../lib/env.js';
+import { env, graphConfigurado } from '../lib/env.js';
 import {
   cookieBase,
   getGraphAccessToken,
@@ -26,6 +26,18 @@ function rutaSegura(valor: string | undefined, porDefecto = '/'): string {
   return valor;
 }
 
+/** Vuelve al frontend (no al backend) conservando la ruta y los parámetros */
+function urlFrontend(destino: string, params?: Record<string, string>): string {
+  const base =
+    (env.FRONTEND_URL.split(',')[0] ?? '').trim().replace(/\/+$/, '') ||
+    'http://localhost:5173';
+  const url = new URL(destino.startsWith('/') ? destino : '/', `${base}/`);
+  for (const [clave, valor] of Object.entries(params ?? {})) {
+    url.searchParams.set(clave, valor);
+  }
+  return url.toString();
+}
+
 /* ============================================================
    GET /api/auth/msgraph/login?redirect=/proyectos/xxx
    Inicia el flujo OAuth delegado con la cuenta de Microsoft del usuario
@@ -33,7 +45,7 @@ function rutaSegura(valor: string | undefined, porDefecto = '/'): string {
 msgraphRoutes.get('/login', async (c) => {
   const session = await auth.api.getSession({ headers: c.req.raw.headers });
   if (!session?.user) {
-    return c.redirect('/login');
+    return c.redirect(urlFrontend('/login'));
   }
 
   if (!graphConfigurado) {
@@ -88,22 +100,16 @@ msgraphRoutes.get('/callback', async (c) => {
   if (errorMicrosoft) {
     console.error('Microsoft devolvió un error en el login:', errorMicrosoft, detalleMicrosoft);
     return c.redirect(
-      `${destino}${destino.includes('?') ? '&' : '?'}sharepoint=error&motivo=${encodeURIComponent(
-        errorMicrosoft
-      )}`
+      urlFrontend(destino, { sharepoint: 'error', motivo: errorMicrosoft ?? 'desconocido' })
     );
   }
 
   if (!code || !state || !stateCookie || state !== stateCookie) {
-    return c.redirect(
-      `${destino}${destino.includes('?') ? '&' : '?'}sharepoint=error&motivo=state_invalido`
-    );
+    return c.redirect(urlFrontend(destino, { sharepoint: 'error', motivo: 'state_invalido' }));
   }
 
   if (!graphConfigurado) {
-    return c.redirect(
-      `${destino}${destino.includes('?') ? '&' : '?'}sharepoint=error&motivo=no_configurado`
-    );
+    return c.redirect(urlFrontend(destino, { sharepoint: 'error', motivo: 'no_configurado' }));
   }
 
   try {
@@ -121,14 +127,12 @@ msgraphRoutes.get('/callback', async (c) => {
       );
     }
 
-    return c.redirect(`${destino}${destino.includes('?') ? '&' : '?'}sharepoint=conectado`);
+    return c.redirect(urlFrontend(destino, { sharepoint: 'conectado' }));
   } catch (err) {
     console.error('Falló el intercambio de código de Microsoft Graph:', err);
     const mensaje = err instanceof Error ? err.message : 'token_exchange_failed';
     return c.redirect(
-      `${destino}${destino.includes('?') ? '&' : '?'}sharepoint=error&motivo=${encodeURIComponent(
-        mensaje.slice(0, 300)
-      )}`
+      urlFrontend(destino, { sharepoint: 'error', motivo: mensaje.slice(0, 300) })
     );
   }
 });

@@ -18,6 +18,10 @@ export const env = {
   PORT: process.env.PORT ?? '3001',
   NODE_ENV,
   CORS_ORIGIN: process.env.CORS_ORIGIN ?? 'http://localhost:5173',
+  /** Origen del frontend: allí se vuelve después del login de Microsoft */
+  FRONTEND_URL:
+    process.env.FRONTEND_URL ??
+    (process.env.CORS_ORIGIN ?? 'http://localhost:5173').split(',')[0].trim(),
   TRUSTED_ORIGINS: process.env.TRUSTED_ORIGINS ?? '',
 
   // Microsoft Graph / SharePoint

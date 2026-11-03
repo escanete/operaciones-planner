@@ -11,9 +11,11 @@ import {
   STATE_COOKIE,
 } from '../lib/graph-session.js';
 import {
+  consultarDeviceCode,
   exchangeCode,
   getAuthCodeUrl,
   getGraphMe,
+  iniciarDeviceCode,
   resolveSiteAndDrive,
 } from '../lib/msgraph.js';
 
@@ -138,6 +140,118 @@ msgraphRoutes.get('/callback', async (c) => {
 });
 
 /* ============================================================
+   Device code flow (sin redirect URI ni HTTPS)
+
+   POST /api/auth/msgraph/device/iniciar  → devuelve el código
+   GET  /api/auth/msgraph/device/estado   → se consulta hasta 'listo'
+   ============================================================ */
+
+interface DevicePendiente {
+  deviceCode: string;
+  expiraAt: number;
+  intervalo: number;
+}
+
+// device_code por usuario de la app (no se expone al navegador)
+const dispositivos = new Map<string, DevicePendiente>();
+
+msgraphRoutes.post('/device/iniciar', async (c) => {
+  const session = await auth.api.getSession({ headers: c.req.raw.headers });
+  if (!session?.user) {
+    return c.json({ error: 'Unauthorized', code: 'AUTH_REQUIRED' }, 401);
+  }
+
+  if (!graphConfigurado) {
+    return c.json(
+      {
+        error: 'SharePoint no está configurado en el servidor',
+        code: 'MSGRAPH_NO_CONFIGURADO',
+        detalle:
+          'Faltan MS_GRAPH_CLIENT_ID, MS_GRAPH_CLIENT_SECRET o MS_GRAPH_TENANT_ID en el entorno del backend.',
+      },
+      503
+    );
+  }
+
+  try {
+    const inicio = await iniciarDeviceCode();
+    dispositivos.set(session.user.id, {
+      deviceCode: inicio.deviceCode,
+      expiraAt: Date.now() + inicio.expiraEn * 1000,
+      intervalo: inicio.intervalo,
+    });
+
+    return c.json({
+      codigo: inicio.codigoUsuario,
+      url: inicio.urlVerificacion,
+      mensaje: inicio.mensaje,
+      intervalo: inicio.intervalo,
+      expiraEn: inicio.expiraEn,
+    });
+  } catch (err) {
+    console.error('No se pudo iniciar el código de dispositivo:', err);
+    return c.json(
+      {
+        error: 'No se pudo iniciar sesión con Microsoft',
+        code: 'MSGRAPH_DEVICE_ERROR',
+        detalle: err instanceof Error ? err.message : String(err),
+      },
+      500
+    );
+  }
+});
+
+msgraphRoutes.get('/device/estado', async (c) => {
+  const session = await auth.api.getSession({ headers: c.req.raw.headers });
+  if (!session?.user) {
+    return c.json({ error: 'Unauthorized', code: 'AUTH_REQUIRED' }, 401);
+  }
+
+  const pendiente = dispositivos.get(session.user.id);
+  if (!pendiente) {
+    return c.json({ estado: 'sin_inicio' });
+  }
+
+  if (Date.now() > pendiente.expiraAt) {
+    dispositivos.delete(session.user.id);
+    return c.json({ estado: 'expirado' });
+  }
+
+  try {
+    const resultado = await consultarDeviceCode(pendiente.deviceCode);
+
+    if (resultado.estado === 'listo') {
+      dispositivos.delete(session.user.id);
+
+      if (!resultado.token.refreshToken) {
+        return c.json({
+          estado: 'error',
+          detalle:
+            'Microsoft no devolvió un refresh token. Revisa que el permiso offline_access esté configurado.',
+        });
+      }
+
+      guardarRefreshToken(c, resultado.token.refreshToken);
+      return c.json({ estado: 'listo' });
+    }
+
+    if (resultado.estado === 'pendiente') {
+      if (resultado.intervalo) pendiente.intervalo = resultado.intervalo;
+      return c.json({ estado: 'pendiente', intervalo: pendiente.intervalo });
+    }
+
+    dispositivos.delete(session.user.id);
+    return c.json(resultado);
+  } catch (err) {
+    dispositivos.delete(session.user.id);
+    return c.json({
+      estado: 'error',
+      detalle: err instanceof Error ? err.message : String(err),
+    });
+  }
+});
+
+/* ============================================================
    GET /api/auth/msgraph/estado
    Diagnóstico para la UI y para el administrador
    ============================================================ */
@@ -151,6 +265,7 @@ msgraphRoutes.get('/estado', async (c) => {
     return c.json({
       configurado: false,
       conectado: false,
+      metodo: env.MS_GRAPH_AUTH_MODE,
       detalle:
         'Faltan MS_GRAPH_CLIENT_ID, MS_GRAPH_CLIENT_SECRET o MS_GRAPH_TENANT_ID en el entorno del backend.',
     });
@@ -164,7 +279,11 @@ msgraphRoutes.get('/estado', async (c) => {
   }
 
   if (!accessToken) {
-    return c.json({ configurado: true, conectado: false });
+    return c.json({
+      configurado: true,
+      conectado: false,
+      metodo: env.MS_GRAPH_AUTH_MODE,
+    });
   }
 
   try {
@@ -173,6 +292,7 @@ msgraphRoutes.get('/estado', async (c) => {
     return c.json({
       configurado: true,
       conectado: true,
+      metodo: env.MS_GRAPH_AUTH_MODE,
       usuario,
       sitio: {
         nombre: sitio.driveName,
@@ -184,6 +304,7 @@ msgraphRoutes.get('/estado', async (c) => {
     return c.json({
       configurado: true,
       conectado: true,
+      metodo: env.MS_GRAPH_AUTH_MODE,
       error: err instanceof Error ? err.message : String(err),
     });
   }

@@ -37,6 +37,13 @@ export const env = {
   MS_GRAPH_SCOPES:
     process.env.MS_GRAPH_SCOPES ??
     'https://graph.microsoft.com/Files.ReadWrite.All https://graph.microsoft.com/Sites.ReadWrite.All https://graph.microsoft.com/User.Read offline_access',
+  /**
+   * Cómo conecta cada usuario su cuenta de Microsoft:
+   * - device: código de dispositivo (funciona con HTTP en red interna, sin redirect URI)
+   * - redirect: OAuth con redirección (requiere HTTPS salvo localhost)
+   */
+  MS_GRAPH_AUTH_MODE:
+    process.env.MS_GRAPH_AUTH_MODE === 'redirect' ? ('redirect' as const) : ('device' as const),
   /** Alcance de los enlaces de compartir: organization | anonymous */
   MS_GRAPH_SHARE_SCOPE: process.env.MS_GRAPH_SHARE_SCOPE ?? 'organization',
   /** Tamaño máximo de subida por archivo (MB) */

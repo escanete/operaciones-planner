@@ -50,13 +50,44 @@ interface CarpetaProyecto {
 interface EstadoGraph {
   configurado: boolean;
   conectado: boolean;
+  metodo?: 'device' | 'redirect';
   detalle?: string;
   error?: string;
   usuario?: { displayName: string | null; mail: string | null; userPrincipalName: string };
   sitio?: { nombre: string; webUrl: string; siteWebUrl: string };
 }
 
+interface DeviceInicio {
+  codigo: string;
+  url: string;
+  mensaje: string;
+  intervalo: number;
+  expiraEn: number;
+}
+
 const ROLES_ESCRITURA = ['SUPER_ADMIN', 'ADMIN_DEPTO', 'PLANIFICADOR', 'COMERCIAL'];
+
+/** Clipboard funciona con https o localhost; en http de red interna usamos el fallback */
+async function copiarAlPortapapeles(texto: string): Promise<boolean> {
+  try {
+    await navigator.clipboard.writeText(texto);
+    return true;
+  } catch {
+    try {
+      const area = document.createElement('textarea');
+      area.value = texto;
+      area.style.position = 'fixed';
+      area.style.opacity = '0';
+      document.body.appendChild(area);
+      area.select();
+      const ok = document.execCommand('copy');
+      area.remove();
+      return ok;
+    } catch {
+      return false;
+    }
+  }
+}
 
 function formatearTamano(bytes: number): string {
   if (!bytes) return '0 B';
@@ -93,6 +124,11 @@ export function ProjectFiles({ proyectoId }: { proyectoId: string }) {
   const [error, setError] = useState<string | null>(null);
   const [aviso, setAviso] = useState<string | null>(null);
   const [copiado, setCopiado] = useState<string | null>(null);
+  const [device, setDevice] = useState<DeviceInicio | null>(null);
+  const [deviceEstado, setDeviceEstado] = useState<
+    'iniciando' | 'pendiente' | 'listo' | 'expirado' | 'rechazado' | 'error' | null
+  >(null);
+  const [deviceError, setDeviceError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const puedeEscribir = ROLES_ESCRITURA.includes(user?.rol ?? '');
@@ -221,7 +257,11 @@ export function ProjectFiles({ proyectoId }: { proyectoId: string }) {
       const res = await api.get<{ enlace: { webUrl: string } }>(
         `/api/proyectos/${proyectoId}/archivos/${archivo.id}/enlace?tipo=${tipo}`
       );
-      await navigator.clipboard.writeText(res.enlace.webUrl);
+      const copiadoOk = await copiarAlPortapapeles(res.enlace.webUrl);
+      if (!copiadoOk) {
+        setError(`No se pudo copiar automáticamente. Enlace: ${res.enlace.webUrl}`);
+        return;
+      }
       setCopiado(archivo.id);
       setAviso(
         tipo === 'edit'
@@ -241,6 +281,85 @@ export function ProjectFiles({ proyectoId }: { proyectoId: string }) {
   const conectar = () => {
     window.location.href = urlLogin;
   };
+
+  const iniciarDevice = async () => {
+    setDeviceError(null);
+    setDeviceEstado('iniciando');
+    // Se abre en el clic para que el navegador no bloquee la ventana
+    const ventana = window.open('https://microsoft.com/devicelogin', '_blank');
+    try {
+      const res = await api.post<DeviceInicio>('/api/auth/msgraph/device/iniciar', {});
+      setDevice(res);
+      setDeviceEstado('pendiente');
+      if (ventana && !ventana.closed) ventana.location.href = res.url;
+    } catch (err) {
+      setDeviceEstado('error');
+      setDeviceError(
+        err instanceof Error ? err.message : 'No se pudo iniciar el código de dispositivo'
+      );
+      ventana?.close();
+    }
+  };
+
+  // Consulta periódica del código de dispositivo hasta que el usuario confirme
+  useEffect(() => {
+    if (!device) return;
+
+    let cancelado = false;
+    let temporizador = 0;
+
+    const consultar = async () => {
+      if (cancelado) return;
+      try {
+        const res = await api.get<{
+          estado: string;
+          intervalo?: number;
+          detalle?: string;
+        }>('/api/auth/msgraph/device/estado');
+        if (cancelado) return;
+
+        if (res.estado === 'listo') {
+          setDevice(null);
+          setDeviceEstado('listo');
+          setAviso('Cuenta de Microsoft conectada. Ya puedes trabajar con los archivos.');
+          try {
+            const estadoActual = await api.get<EstadoGraph>('/api/auth/msgraph/estado');
+            if (!cancelado) setEstado(estadoActual);
+          } catch {
+            /* la recarga de archivos ya valida la conexión */
+          }
+          await cargarArchivos();
+          return;
+        }
+
+        if (res.estado === 'pendiente') {
+          const segundos = Math.max(5, res.intervalo ?? device.intervalo);
+          temporizador = window.setTimeout(consultar, segundos * 1000);
+          return;
+        }
+
+        setDevice(null);
+        setDeviceEstado(
+          res.estado === 'expirado' || res.estado === 'rechazado' ? res.estado : 'error'
+        );
+        setDeviceError(res.detalle ?? null);
+      } catch (err) {
+        if (cancelado) return;
+        setDevice(null);
+        setDeviceEstado('error');
+        setDeviceError(
+          err instanceof Error ? err.message : 'No se pudo verificar el código de Microsoft'
+        );
+      }
+    };
+
+    temporizador = window.setTimeout(consultar, Math.max(5, device.intervalo) * 1000);
+
+    return () => {
+      cancelado = true;
+      window.clearTimeout(temporizador);
+    };
+  }, [device, cargarArchivos]);
 
   const desconectar = async () => {
     if (!window.confirm('¿Desconectar tu cuenta de Microsoft de esta sesión del navegador?')) {
@@ -366,10 +485,79 @@ export function ProjectFiles({ proyectoId }: { proyectoId: string }) {
                 permisos del sitio <strong>ScadatechRecursos</strong>. Solo se solicita acceso a
                 archivos y a tu perfil.
               </p>
-              <Button onClick={conectar} className="mt-1">
-                <Cloud className="mr-2 h-4 w-4" />
-                Conectar con Microsoft
-              </Button>
+
+              {estado?.metodo === 'redirect' ? (
+                <Button onClick={conectar} className="mt-1">
+                  <Cloud className="mr-2 h-4 w-4" />
+                  Conectar con Microsoft
+                </Button>
+              ) : device ? (
+                <div className="mt-1 w-full max-w-md space-y-3 rounded-lg border bg-muted/40 p-4 text-left">
+                  <p className="text-sm">
+                    <strong>1.</strong> Abre{' '}
+                    <a
+                      href={device.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="font-medium underline underline-offset-2"
+                    >
+                      microsoft.com/devicelogin
+                    </a>{' '}
+                    en tu navegador.
+                  </p>
+                  <p className="text-sm">
+                    <strong>2.</strong> Ingresa este código:
+                  </p>
+                  <div className="flex items-center justify-center gap-2">
+                    <code className="rounded-md border bg-background px-4 py-2 text-xl font-bold tracking-[0.2em]">
+                      {device.codigo}
+                    </code>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => void copiarAlPortapapeles(device.codigo)}
+                    >
+                      Copiar
+                    </Button>
+                  </div>
+                  <p className="text-sm">
+                    <strong>3.</strong> Inicia sesión con tu cuenta de Microsoft y vuelve aquí; la
+                    pantalla se actualizará sola.
+                  </p>
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    Esperando confirmación… el código vence en{' '}
+                    {Math.max(1, Math.round(device.expiraEn / 60))} minutos.
+                  </div>
+                </div>
+              ) : (
+                <Button
+                  onClick={iniciarDevice}
+                  className="mt-1"
+                  disabled={deviceEstado === 'iniciando'}
+                >
+                  {deviceEstado === 'iniciando' ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <Cloud className="mr-2 h-4 w-4" />
+                  )}
+                  {deviceEstado === 'iniciando' ? 'Generando código…' : 'Conectar con Microsoft'}
+                </Button>
+              )}
+
+              {deviceEstado === 'expirado' && (
+                <p className="text-sm text-destructive">
+                  El código venció. Genera uno nuevo e inténtalo otra vez.
+                </p>
+              )}
+              {deviceEstado === 'rechazado' && (
+                <p className="text-sm text-destructive">
+                  Cancelaste la autorización en Microsoft. Puedes intentarlo de nuevo.
+                </p>
+              )}
+              {deviceError && (
+                <p className="max-w-md text-sm text-destructive">{deviceError}</p>
+              )}
             </CardContent>
           </Card>
         ) : (

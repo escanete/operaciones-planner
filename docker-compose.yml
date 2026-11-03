@@ -33,6 +33,17 @@ services:
       TRUSTED_ORIGINS: http://192.168.25.7:5173,http://192.168.25.7:3001,http://localhost:5173,http://localhost:3001
       # Bundle del MCP local (Claude Desktop) que sirve este backend
       MCP_BUNDLE_PATH: /app/public/operaciones-planner-mcp.js
+      # Microsoft Graph / SharePoint (permisos delegados: cada usuario conecta su cuenta)
+      # El secreto (MS_GRAPH_CLIENT_SECRET) va solo en .env.docker, no aquí.
+      MS_GRAPH_AUTH_MODE: device
+      MS_GRAPH_CLIENT_ID: 724ce5f1-3e5f-4719-af85-670d55e4fa02
+      MS_GRAPH_TENANT_ID: 90c2b2c3-5d61-4775-a035-30c524e8dafe
+      MS_GRAPH_SITE_URL: https://scadatech.sharepoint.com/sites/ScadatechRecursos
+      MS_GRAPH_DRIVE_NAME: Documentos compartidos
+      MS_GRAPH_FOLDER_ROOT: Operaciones/Planner_Proyectos
+      MS_GRAPH_SHARE_SCOPE: organization
+      MS_GRAPH_MAX_UPLOAD_MB: "100"
+      FRONTEND_URL: http://192.168.25.7:5173
     volumes:
       - db_data:/app/data
     ports:

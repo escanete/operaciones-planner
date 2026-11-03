@@ -131,6 +131,102 @@ export function refreshAccessToken(refreshToken: string): Promise<TokenResultado
 }
 
 /* ============================================================
+   Device code flow
+
+   No necesita redirect URI ni HTTPS: el usuario abre
+   microsoft.com/devicelogin e ingresa un código temporal.
+   ============================================================ */
+
+export interface DeviceCodeInicio {
+  deviceCode: string;
+  codigoUsuario: string;
+  urlVerificacion: string;
+  expiraEn: number;
+  intervalo: number;
+  mensaje: string;
+}
+
+export async function iniciarDeviceCode(): Promise<DeviceCodeInicio> {
+  const res = await fetch(`${authorityBase()}/devicecode`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      client_id: env.MS_GRAPH_CLIENT_ID,
+      scope: getScopes().join(' '),
+    }),
+  });
+
+  const body = (await res.json().catch(() => null)) as Record<string, any> | null;
+
+  if (!res.ok || !body?.device_code) {
+    throw new GraphAuthError(
+      body?.error_description ?? `Microsoft rechazó la solicitud (${res.status})`,
+      body?.error ?? 'DEVICE_CODE_ERROR'
+    );
+  }
+
+  return {
+    deviceCode: body.device_code,
+    codigoUsuario: body.user_code,
+    urlVerificacion: body.verification_uri,
+    expiraEn: Number(body.expires_in ?? 900),
+    intervalo: Math.max(5, Number(body.interval ?? 5)),
+    mensaje: body.message ?? '',
+  };
+}
+
+export type DeviceCodeResultado =
+  | { estado: 'listo'; token: TokenResultado }
+  | { estado: 'pendiente'; intervalo?: number }
+  | { estado: 'expirado' }
+  | { estado: 'rechazado' }
+  | { estado: 'error'; detalle: string };
+
+export async function consultarDeviceCode(deviceCode: string): Promise<DeviceCodeResultado> {
+  const res = await fetch(`${authorityBase()}/token`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      client_id: env.MS_GRAPH_CLIENT_ID,
+      client_secret: env.MS_GRAPH_CLIENT_SECRET,
+      grant_type: 'urn:ietf:params:oauth:grant-type:device_code',
+      device_code: deviceCode,
+    }),
+  });
+
+  const body = (await res.json().catch(() => null)) as Record<string, any> | null;
+
+  if (res.ok && body?.access_token) {
+    return {
+      estado: 'listo',
+      token: {
+        accessToken: body.access_token,
+        refreshToken: body.refresh_token ?? undefined,
+        expiresAt: Date.now() + (Number(body.expires_in ?? 3600) - 60) * 1000,
+        scope: body.scope ?? undefined,
+      },
+    };
+  }
+
+  switch (body?.error) {
+    case 'authorization_pending':
+      return { estado: 'pendiente' };
+    case 'slow_down':
+      return { estado: 'pendiente', intervalo: 5 };
+    case 'expired_token':
+    case 'code_expired':
+      return { estado: 'expirado' };
+    case 'authorization_declined':
+      return { estado: 'rechazado' };
+    default:
+      return {
+        estado: 'error',
+        detalle: body?.error_description ?? `Microsoft respondió ${res.status}`,
+      };
+  }
+}
+
+/* ============================================================
    Llamadas REST a Graph
    ============================================================ */
 

@@ -125,41 +125,58 @@ async function enviarToken(
 }
 
 /**
- * Pide tokens al endpoint de Microsoft.
+ * Pide tokens al endpoint de Microsoft probando ambas configuraciones de la
+ * App Registration:
  *
- * Primero intenta con `client_secret` (cliente confidencial). Si Microsoft
- * responde que el secreto falta o no es válido, reintenta SIN secreto: así
- * también funciona cuando la App Registration está configurada como cliente
- * público ("Allow public client flows" habilitado), que es lo habitual para
- * el flujo de código de dispositivo.
+ * - `publico`: primero SIN secreto (flujo de código de dispositivo, que es
+ *   para clientes públicos). Si Microsoft pide credencial, reintenta con.
+ * - `secreto`: primero CON secreto (cliente confidencial). Si Microsoft no lo
+ *   acepta, reintenta sin.
+ *
+ * Así funciona tanto si en Azure está activo "Allow public client flows"
+ * como si la app está registrada como cliente confidencial.
  */
-async function solicitarToken(extra: Record<string, string>): Promise<RespuestaToken> {
-  const primero = await enviarToken(extra, true);
-  if (primero.ok && primero.body?.access_token) return primero;
+async function solicitarToken(
+  extra: Record<string, string>,
+  preferencia: 'secreto' | 'publico' = 'secreto'
+): Promise<RespuestaToken> {
+  const intentos = !env.MS_GRAPH_CLIENT_SECRET
+    ? [false]
+    : preferencia === 'publico'
+      ? [false, true]
+      : [true, false];
 
-  const puedeReintentar = Boolean(env.MS_GRAPH_CLIENT_SECRET) && esErrorDeCredencial(primero.body);
-  const respuesta = puedeReintentar ? await enviarToken(extra, false) : primero;
+  let respuesta: RespuestaToken | null = null;
+  let reintento = false;
+
+  for (const conSecreto of intentos) {
+    respuesta = await enviarToken(extra, conSecreto);
+    if (respuesta.ok && respuesta.body?.access_token) return respuesta;
+    if (!esErrorDeCredencial(respuesta.body)) return respuesta;
+    reintento = true;
+  }
 
   // Deja rastro en los logs del servidor sin exponer el secreto.
-  const error = String(respuesta.body?.error ?? '');
-  if (!respuesta.ok && error !== 'authorization_pending' && error !== 'slow_down') {
+  const error = String(respuesta?.body?.error ?? '');
+  if (respuesta && !respuesta.ok && error !== 'authorization_pending' && error !== 'slow_down') {
     console.warn('[msgraph] Microsoft rechazó la solicitud de token', {
       grant: extra.grant_type,
       secretoConfigurado: Boolean(env.MS_GRAPH_CLIENT_SECRET),
       secretoLargo: env.MS_GRAPH_CLIENT_SECRET.length,
-      reintentoSinSecreto: puedeReintentar,
+      reintento,
       status: respuesta.status,
       error,
       codigos: respuesta.body?.error_codes,
     });
   }
 
-  return respuesta;
+  return respuesta ?? { ok: false, status: 0, body: null };
 }
 
 const AYUDA_CREDENCIAL =
-  'Revisa MS_GRAPH_CLIENT_SECRET en el servidor o habilita "Allow public client flows" ' +
-  'en la App Registration de Microsoft Entra (Authentication → Advanced settings).';
+  'Activa "Allow public client flows" en la App Registration de Microsoft Entra ' +
+  '(Authentication → Advanced settings → Yes → Save) y vuelve a intentar. ' +
+  'Si ya está activo, revisa MS_GRAPH_CLIENT_SECRET en el servidor.';
 
 function mensajeTokenError(respuesta: RespuestaToken): string {
   const detalle =
@@ -253,10 +270,13 @@ export type DeviceCodeResultado =
   | { estado: 'error'; detalle: string };
 
 export async function consultarDeviceCode(deviceCode: string): Promise<DeviceCodeResultado> {
-  const res = await solicitarToken({
-    grant_type: 'urn:ietf:params:oauth:grant-type:device_code',
-    device_code: deviceCode,
-  });
+  const res = await solicitarToken(
+    {
+      grant_type: 'urn:ietf:params:oauth:grant-type:device_code',
+      device_code: deviceCode,
+    },
+    'publico'
+  );
 
   const body = res.body;
 

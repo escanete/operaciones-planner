@@ -3,10 +3,27 @@ import 'dotenv/config';
 const BETTER_AUTH_URL = process.env.BETTER_AUTH_URL ?? 'http://localhost:3001';
 const NODE_ENV = process.env.NODE_ENV ?? 'development';
 
+/**
+ * Limpia un valor de entorno: quita espacios y comillas accidentales.
+ * Un secreto copiado con "" o con un salto de línea hace que Microsoft
+ * rechace el login con errores difíciles de diagnosticar.
+ */
+function limpiar(valor: string | undefined): string {
+  const texto = (valor ?? '').trim();
+  if (
+    texto.length >= 2 &&
+    ((texto.startsWith('"') && texto.endsWith('"')) ||
+      (texto.startsWith("'") && texto.endsWith("'")))
+  ) {
+    return texto.slice(1, -1).trim();
+  }
+  return texto;
+}
+
 /** Microsoft Graph / SharePoint (permisos delegados: cada usuario con su cuenta) */
-const MS_GRAPH_CLIENT_ID = process.env.MS_GRAPH_CLIENT_ID ?? '';
-const MS_GRAPH_CLIENT_SECRET = process.env.MS_GRAPH_CLIENT_SECRET ?? '';
-const MS_GRAPH_TENANT_ID = process.env.MS_GRAPH_TENANT_ID ?? '';
+const MS_GRAPH_CLIENT_ID = limpiar(process.env.MS_GRAPH_CLIENT_ID);
+const MS_GRAPH_CLIENT_SECRET = limpiar(process.env.MS_GRAPH_CLIENT_SECRET);
+const MS_GRAPH_TENANT_ID = limpiar(process.env.MS_GRAPH_TENANT_ID);
 const MS_GRAPH_REDIRECT_URI =
   process.env.MS_GRAPH_REDIRECT_URI ?? `${BETTER_AUTH_URL}/api/auth/msgraph/callback`;
 
@@ -50,9 +67,15 @@ export const env = {
   MS_GRAPH_MAX_UPLOAD_MB: Number(process.env.MS_GRAPH_MAX_UPLOAD_MB ?? 100),
 } as const;
 
-/** true cuando la App Registration está configurada en el entorno */
+/**
+ * true cuando la App Registration está configurada en el entorno.
+ * El flujo de código de dispositivo funciona como cliente público y no
+ * necesita el secreto; el flujo con redirección sí lo exige.
+ */
 export const graphConfigurado = Boolean(
-  env.MS_GRAPH_CLIENT_ID && env.MS_GRAPH_CLIENT_SECRET && env.MS_GRAPH_TENANT_ID
+  env.MS_GRAPH_CLIENT_ID &&
+    env.MS_GRAPH_TENANT_ID &&
+    (env.MS_GRAPH_CLIENT_SECRET || env.MS_GRAPH_AUTH_MODE === 'device')
 );
 
 export type Env = typeof env;

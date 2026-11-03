@@ -79,15 +79,38 @@ export function getAuthCodeUrl(state: string): string {
   return `${authorityBase()}/authorize?${params.toString()}`;
 }
 
-async function pedirToken(extra: Record<string, string>): Promise<TokenResultado> {
+interface RespuestaToken {
+  ok: boolean;
+  status: number;
+  body: Record<string, any> | null;
+}
+
+/** Códigos con los que Microsoft indica que el cliente no pudo autenticarse */
+const CODIGOS_CREDENCIAL = [7000215, 7000216, 7000218, 7000222];
+
+function esErrorDeCredencial(body: Record<string, any> | null): boolean {
+  if (!body) return false;
+  if (body.error === 'invalid_client') return true;
+  const codigos: number[] = Array.isArray(body.error_codes) ? body.error_codes : [];
+  return codigos.some((codigo) => CODIGOS_CREDENCIAL.includes(codigo));
+}
+
+async function enviarToken(
+  extra: Record<string, string>,
+  conSecreto: boolean
+): Promise<RespuestaToken> {
+  const params: Record<string, string> = {
+    client_id: env.MS_GRAPH_CLIENT_ID,
+    ...extra,
+  };
+  if (conSecreto && env.MS_GRAPH_CLIENT_SECRET) {
+    params.client_secret = env.MS_GRAPH_CLIENT_SECRET;
+  }
+
   const res = await fetch(`${authorityBase()}/token`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({
-      client_id: env.MS_GRAPH_CLIENT_ID,
-      client_secret: env.MS_GRAPH_CLIENT_SECRET,
-      ...extra,
-    }),
+    body: new URLSearchParams(params),
   });
 
   const texto = await res.text();
@@ -98,11 +121,41 @@ async function pedirToken(extra: Record<string, string>): Promise<TokenResultado
     body = null;
   }
 
+  return { ok: res.ok, status: res.status, body };
+}
+
+/**
+ * Pide tokens al endpoint de Microsoft.
+ *
+ * Primero intenta con `client_secret` (cliente confidencial). Si Microsoft
+ * responde que el secreto falta o no es válido, reintenta SIN secreto: así
+ * también funciona cuando la App Registration está configurada como cliente
+ * público ("Allow public client flows" habilitado), que es lo habitual para
+ * el flujo de código de dispositivo.
+ */
+async function solicitarToken(extra: Record<string, string>): Promise<RespuestaToken> {
+  const primero = await enviarToken(extra, true);
+  if (primero.ok && primero.body?.access_token) return primero;
+  if (!env.MS_GRAPH_CLIENT_SECRET || !esErrorDeCredencial(primero.body)) return primero;
+  return enviarToken(extra, false);
+}
+
+const AYUDA_CREDENCIAL =
+  'Revisa MS_GRAPH_CLIENT_SECRET en el servidor o habilita "Allow public client flows" ' +
+  'en la App Registration de Microsoft Entra (Authentication → Advanced settings).';
+
+function mensajeTokenError(respuesta: RespuestaToken): string {
+  const detalle =
+    respuesta.body?.error_description ?? `Microsoft rechazó la solicitud (${respuesta.status})`;
+  return esErrorDeCredencial(respuesta.body) ? `${detalle} ${AYUDA_CREDENCIAL}` : detalle;
+}
+
+async function pedirToken(extra: Record<string, string>): Promise<TokenResultado> {
+  const res = await solicitarToken(extra);
+  const body = res.body;
+
   if (!res.ok || !body?.access_token) {
-    throw new GraphAuthError(
-      body?.error_description ?? `Microsoft rechazó la solicitud (${res.status})`,
-      body?.error ?? 'GRAPH_AUTH_ERROR'
-    );
+    throw new GraphAuthError(mensajeTokenError(res), body?.error ?? 'GRAPH_AUTH_ERROR');
   }
 
   return {
@@ -183,18 +236,12 @@ export type DeviceCodeResultado =
   | { estado: 'error'; detalle: string };
 
 export async function consultarDeviceCode(deviceCode: string): Promise<DeviceCodeResultado> {
-  const res = await fetch(`${authorityBase()}/token`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({
-      client_id: env.MS_GRAPH_CLIENT_ID,
-      client_secret: env.MS_GRAPH_CLIENT_SECRET,
-      grant_type: 'urn:ietf:params:oauth:grant-type:device_code',
-      device_code: deviceCode,
-    }),
+  const res = await solicitarToken({
+    grant_type: 'urn:ietf:params:oauth:grant-type:device_code',
+    device_code: deviceCode,
   });
 
-  const body = (await res.json().catch(() => null)) as Record<string, any> | null;
+  const body = res.body;
 
   if (res.ok && body?.access_token) {
     return {
@@ -219,10 +266,7 @@ export async function consultarDeviceCode(deviceCode: string): Promise<DeviceCod
     case 'authorization_declined':
       return { estado: 'rechazado' };
     default:
-      return {
-        estado: 'error',
-        detalle: body?.error_description ?? `Microsoft respondió ${res.status}`,
-      };
+      return { estado: 'error', detalle: mensajeTokenError(res) };
   }
 }
 
@@ -357,6 +401,62 @@ export async function resolveSiteAndDrive(accessToken: string): Promise<SiteDriv
     driveWebUrl: drive.webUrl,
   };
   return _siteDrive;
+}
+
+/* ============================================================
+   Diagnóstico de credenciales
+
+   Comprueba si Microsoft acepta el client_secret configurado. No
+   devuelve el secreto: solo su largo y el resultado de la prueba.
+   ============================================================ */
+
+export interface DiagnosticoCredenciales {
+  configurado: boolean;
+  secretoConfigurado: boolean;
+  secretoLargo: number;
+  prueba: 'ok' | 'error' | 'sin_secreto';
+  codigo?: number;
+  detalle?: string;
+}
+
+export async function diagnosticarCredenciales(): Promise<DiagnosticoCredenciales> {
+  const base: DiagnosticoCredenciales = {
+    configurado: Boolean(env.MS_GRAPH_CLIENT_ID && env.MS_GRAPH_TENANT_ID),
+    secretoConfigurado: Boolean(env.MS_GRAPH_CLIENT_SECRET),
+    secretoLargo: env.MS_GRAPH_CLIENT_SECRET.length,
+    prueba: 'sin_secreto',
+  };
+
+  if (!env.MS_GRAPH_CLIENT_SECRET) return base;
+
+  try {
+    const res = await fetch(`${authorityBase()}/token`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        grant_type: 'client_credentials',
+        client_id: env.MS_GRAPH_CLIENT_ID,
+        client_secret: env.MS_GRAPH_CLIENT_SECRET,
+        scope: 'https://graph.microsoft.com/.default',
+      }),
+    });
+    const body = (await res.json().catch(() => null)) as Record<string, any> | null;
+
+    if (res.ok && body?.access_token) return { ...base, prueba: 'ok' };
+
+    return {
+      ...base,
+      prueba: 'error',
+      codigo: Array.isArray(body?.error_codes) ? Number(body.error_codes[0]) : undefined,
+      detalle: String(body?.error_description ?? `Microsoft respondió ${res.status}`).slice(0, 300),
+    };
+  } catch (err) {
+    return {
+      ...base,
+      prueba: 'error',
+      detalle: err instanceof Error ? err.message : String(err),
+    };
+  }
 }
 
 /** Usuario autenticado en Microsoft (para mostrar en la UI) */

@@ -12,6 +12,7 @@ import {
 } from '../lib/graph-session.js';
 import {
   consultarDeviceCode,
+  diagnosticarCredenciales,
   exchangeCode,
   getAuthCodeUrl,
   getGraphMe,
@@ -308,6 +309,33 @@ msgraphRoutes.get('/estado', async (c) => {
       error: err instanceof Error ? err.message : String(err),
     });
   }
+});
+
+/* ============================================================
+   GET /api/auth/msgraph/diagnostico (solo administradores)
+
+   Comprueba si Microsoft acepta el client_secret del servidor. No
+   devuelve el secreto; solo si está configurado, su largo y el
+   resultado de la prueba real contra Microsoft.
+   ============================================================ */
+msgraphRoutes.get('/diagnostico', async (c) => {
+  const session = await auth.api.getSession({ headers: c.req.raw.headers });
+  if (!session?.user) {
+    return c.json({ error: 'Unauthorized', code: 'AUTH_REQUIRED' }, 401);
+  }
+
+  const rol = String((session.user as unknown as { rol?: string }).rol ?? '');
+  if (!['SUPER_ADMIN', 'ADMIN_DEPTO'].includes(rol)) {
+    return c.json({ error: 'Solo administradores', code: 'FORBIDDEN' }, 403);
+  }
+
+  const diagnostico = await diagnosticarCredenciales();
+  return c.json({
+    ...diagnostico,
+    metodo: env.MS_GRAPH_AUTH_MODE,
+    clientId: env.MS_GRAPH_CLIENT_ID,
+    tenantId: env.MS_GRAPH_TENANT_ID,
+  });
 });
 
 /* ============================================================

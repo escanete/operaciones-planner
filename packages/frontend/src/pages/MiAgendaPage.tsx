@@ -4,10 +4,11 @@ import { useAuthStore } from '@/stores/authStore';
 import { usePlanningStore } from '@/stores/planningStore';
 import { useRecurso, useGraphEstado } from '@/hooks/useApi';
 import { api, ApiError } from '@/services/api';
+import { useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { CalendarDays, CalendarCheck, ChevronLeft, ChevronRight, ExternalLink, Loader2, LogOut, Settings, User, Calendar, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { CalendarDays, CalendarCheck, ChevronLeft, ChevronRight, ExternalLink, Loader2, LogOut, Settings, User, Calendar, AlertCircle, CheckCircle2, X } from 'lucide-react';
 import { format, addDays, parseISO, startOfWeek, endOfWeek, addWeeks } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
@@ -31,8 +32,9 @@ interface AgendaState {
 export function MiAgendaPage() {
   const navigate = useNavigate();
   const { user, logout } = useAuthStore();
+  const queryClient = useQueryClient();
   const { data: recurso, isLoading: recursoLoading } = useRecurso(user?.recursoId ?? '');
-  const { data: estadoGraph } = useGraphEstado();
+  const { data: estadoGraph, refetch: refetchGraphEstado } = useGraphEstado();
   
   const [state, setState] = useState<AgendaState>({
     asignaciones: [],
@@ -40,6 +42,10 @@ export function MiAgendaPage() {
     error: null,
     weekStart: startOfWeek(new Date(), { weekStartsOn: 1 }),
   });
+
+  // Device code flow state
+  const [deviceCode, setDeviceCode] = useState<{ codigo: string; url: string; intervalo: number; expiraEn: number } | null>(null);
+  const [devicePolling, setDevicePolling] = useState(false);
 
   const cargarAsignaciones = async () => {
     if (!user?.recursoId) return;
@@ -111,11 +117,59 @@ export function MiAgendaPage() {
         '/api/auth/msgraph/device/iniciar', 
         {}
       );
-      // Abrir en nueva pestaña y guardar el código en el estado para mostrarlo
+      setDeviceCode({ codigo: res.codigo, url: res.url, intervalo: res.intervalo, expiraEn: res.expiraEn });
+      setDevicePolling(true);
       window.open(res.url, '_blank');
-      alert(`Código: ${res.codigo}\n\nSe ha abierto microsoft.com/devicelogin en otra pestaña.\nIngresa el código para conectar tu calendario de Outlook.`);
+      // Iniciar polling
+      pollDeviceCode();
     } catch (err) {
       alert('No se pudo iniciar la conexión: ' + (err instanceof Error ? err.message : String(err)));
+    }
+  };
+
+  const cancelarConexion = () => {
+    setDevicePolling(false);
+    setDeviceCode(null);
+  };
+
+  const pollDeviceCode = async () => {
+    if (!devicePolling) return;
+    
+    try {
+      const res = await api.get<{ 
+        estado: 'iniciando' | 'pendiente' | 'listo' | 'expirado' | 'rechazado' | 'error' | 'sin_inicio'; 
+        intervalo?: number;
+        detalle?: string;
+        cuenta?: string | null;
+      }>('/api/auth/msgraph/device/estado');
+      
+      if (res.estado === 'listo') {
+        setDevicePolling(false);
+        setDeviceCode(null);
+        // Refrescar estado de Graph (calendario) y recurso (por si se auto-vinculó)
+        await Promise.all([refetchGraphEstado(), queryClient.invalidateQueries({ queryKey: ['recursos'] })]);
+        alert(`¡Outlook conectado! (${res.cuenta ?? 'cuenta de Microsoft'})`);
+      } else if (res.estado === 'pendiente') {
+        const intervalo = (res.intervalo ?? 5) * 1000;
+        setTimeout(pollDeviceCode, intervalo);
+      } else if (res.estado === 'expirado') {
+        setDevicePolling(false);
+        setDeviceCode(null);
+        alert('El código expiró. Intenta de nuevo.');
+      } else if (res.estado === 'rechazado') {
+        setDevicePolling(false);
+        setDeviceCode(null);
+        alert('La autorización fue rechazada.');
+      } else if (res.estado === 'error') {
+        setDevicePolling(false);
+        setDeviceCode(null);
+        alert('Error: ' + (res.detalle ?? 'desconocido'));
+      }
+    } catch (err) {
+      console.error('Error polling device code:', err);
+      setDevicePolling(false);
+      setDeviceCode(null);
+      alert('Error consultando el estado: ' + (err instanceof Error ? err.message : String(err)));
     }
   };
 
@@ -160,6 +214,36 @@ export function MiAgendaPage() {
           )}
         </div>
       </div>
+
+      {/* Device code flow UI */}
+      {deviceCode && devicePolling && (
+        <Card className="mb-4 border-primary bg-primary/5">
+          <CardContent className="py-4">
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex-1">
+                <p className="font-medium text-primary">Conectando con Microsoft...</p>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Ingresa este código en <a href={deviceCode.url} target="_blank" rel="noopener" className="underline">microsoft.com/devicelogin</a>
+                </p>
+                <div className="mt-3 flex items-center gap-3">
+                  <code className="px-3 py-1.5 bg-background border rounded font-mono text-lg letter-spacing-wide font-bold">
+                    {deviceCode.codigo}
+                  </code>
+                  <Button variant="outline" size="sm" onClick={() => navigator.clipboard.writeText(deviceCode.codigo)}>
+                    Copiar
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground mt-2">
+                  El código expira en {Math.ceil(deviceCode.expiraEn / 60)} minutos. Esperando autorización...
+                </p>
+              </div>
+              <Button variant="ghost" size="icon" onClick={cancelarConexion}>
+                <X className="h-5 w-5" />
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Info del recurso vinculado */}
       {recursoLoading ? (

@@ -146,7 +146,16 @@ export function MiAgendaPage() {
       if (res.estado === 'listo') {
         setDevicePolling(false);
         setDeviceCode(null);
-        // Refrescar estado de Graph (calendario) y recurso (por si se auto-vinculó)
+        // Refrescar sesión de Better-Auth para obtener el user actualizado con recursoId
+        const sessionRes = await fetch('/api/auth/get-session', { credentials: 'include' });
+        if (sessionRes.ok) {
+          const data = await sessionRes.json();
+          if (data?.user) {
+            const { useAuthStore } = await import('@/stores/authStore');
+            useAuthStore.getState().setUser(data.user);
+          }
+        }
+        // Refrescar estado de Graph (calendario) y recurso
         await Promise.all([refetchGraphEstado(), queryClient.invalidateQueries({ queryKey: ['recursos'] })]);
         alert(`¡Outlook conectado! (${res.cuenta ?? 'cuenta de Microsoft'})`);
       } else if (res.estado === 'pendiente') {

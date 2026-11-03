@@ -106,9 +106,11 @@ async function main(): Promise<void> {
     if (!hasFlag(args, "--no-install")) {
       try {
         const install = installClaudeDesktop();
-        print(`Claude Desktop configurado: ${install.configPath}`);
+        print(`Claude Desktop configurado en: ${install.configPaths.join(", ")}`);
         print("Cierra y vuelve a abrir Claude Desktop para que aparezca el servidor.");
-        if (install.backupPath) print(`Respaldo de la configuracion anterior: ${install.backupPath}`);
+        for (const backup of install.backupPaths) {
+          print(`Respaldo de la configuracion anterior: ${backup}`);
+        }
       } catch (error) {
         print(
           `No se pudo configurar Claude Desktop automaticamente: ${
@@ -146,7 +148,7 @@ async function main(): Promise<void> {
   if (hasFlag(args, "--install")) {
     const install = installClaudeDesktop();
     print(`Servidor MCP registrado en Claude Desktop.`);
-    print(`Config: ${install.configPath}`);
+    print(`Config: ${install.configPaths.join(", ")}`);
     print(`Comando: ${install.nodePath} ${install.serverPath}`);
     return;
   }
@@ -155,8 +157,8 @@ async function main(): Promise<void> {
     const result = uninstallClaudeDesktop();
     print(
       result.removed
-        ? `Servidor MCP quitado de ${result.configPath}.`
-        : `El servidor MCP no estaba registrado en ${result.configPath}.`
+        ? `Servidor MCP quitado de ${result.configPaths.join(", ")}.`
+        : `El servidor MCP no estaba registrado en ninguna configuracion de Claude Desktop.`
     );
     return;
   }

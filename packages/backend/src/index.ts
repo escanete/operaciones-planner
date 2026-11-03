@@ -3,11 +3,9 @@ import { serve } from '@hono/node-server';
 import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
 import { env } from './lib/env.js';
-import { prisma } from './lib/db.js';
 import { auth } from './lib/auth.js';
 import { errorHandler } from './middlewares/error-handler.js';
 
-// Routes
 import { authRoutes } from './routes/auth.js';
 import { departamentosRoutes } from './routes/departamentos.js';
 import { equiposRoutes } from './routes/equipos.js';
@@ -27,76 +25,71 @@ import { auditoriaRoutes } from './routes/auditoria.js';
 import { reportesRoutes } from './routes/reportes.js';
 import { healthRoutes } from './routes/health.js';
 import { mcpRoutes } from './routes/mcp.js';
+import { msgraphRoutes } from './routes/msgraph-auth.js';
+import { projectFilesRoutes } from './routes/project-files.js';
 
 const app = new Hono();
 
-// ============================================
-// MIDDLEWARE GLOBAL
-// ============================================
 app.use('*', logger());
-app.use('*', cors({
-  origin: env.CORS_ORIGIN,
-  credentials: true,
-  allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowHeaders: ['Content-Type', 'Authorization'],
-}));
+app.use(
+  '*',
+  cors({
+    origin: env.CORS_ORIGIN,
+    credentials: true,
+    allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowHeaders: ['Content-Type', 'Authorization'],
+  })
+);
 app.use('*', errorHandler());
 
-// ============================================
-// PUBLIC ROUTES (no auth required)
-// ============================================
+/* ============================================================
+   Rutas públicas (sin sesión de la app)
+   ============================================================ */
+
+// Health y MCP autentican por su cuenta (MCP usa su propio token)
 app.route('/api/health', healthRoutes);
-app.route('/api/auth', authRoutes);
-// Descarga del servidor MCP: publica a proposito (solo entrega el cliente JS)
 app.route('/api/mcp', mcpRoutes);
 
-// ============================================
-// PROTECTED ROUTES (auth required)
-// ============================================
-const protectedApp = app.basePath('/api');
-// Audit middleware inline para compatibilidad de tipos
-protectedApp.use('*', async (c, next) => {
-  const method = c.req.method;
-  if (method !== 'GET' && !c.req.url.includes('/health')) {
-    // Se ejecutará post-auth, aquí solo marcamos
-    await next();
-    return;
-  }
-  await next();
-});
-protectedApp.use('*', async (c, next) => {
+// IMPORTANTE: /api/auth/msgraph debe ir ANTES de /api/auth, porque
+// Better-Auth captura todo /api/auth/* y respondería 404 a estas rutas.
+app.route('/api/auth/msgraph', msgraphRoutes);
+app.route('/api/auth', authRoutes);
+
+/* ============================================================
+   API protegida: requiere sesión de la aplicación
+   ============================================================ */
+const api = new Hono();
+
+api.use('*', async (c, next) => {
   const session = await auth.api.getSession({ headers: c.req.raw.headers });
   if (!session?.user) {
     return c.json({ error: 'Unauthorized', code: 'AUTH_REQUIRED' }, 401);
   }
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   (c as any).set('user', session.user);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   (c as any).set('session', session.session);
   await next();
 });
 
-// Register protected routes
-protectedApp.route('/departamentos', departamentosRoutes);
-protectedApp.route('/equipos', equiposRoutes);
-protectedApp.route('/cargos', cargosRoutes);
-protectedApp.route('/recursos', recursosRoutes);
-protectedApp.route('/proyectos', proyectosRoutes);
-protectedApp.route('/clientes', clientesRoutes);
-protectedApp.route('/tipos-actividad', tiposActividadRoutes);
-protectedApp.route('/asignaciones', asignacionesRoutes);
-protectedApp.route('/actividades', actividadesRoutes);
-protectedApp.route('/materiales', materialesRoutes);
-protectedApp.route('/materiales-catalogo', materialesCatalogoRoutes);
-protectedApp.route('/etiquetas', etiquetasRoutes);
-protectedApp.route('/planning', planningRoutes);
-protectedApp.route('/usuarios', usuariosRoutes);
-protectedApp.route('/auditoria', auditoriaRoutes);
-protectedApp.route('/reportes', reportesRoutes);
+api.route('/departamentos', departamentosRoutes);
+api.route('/equipos', equiposRoutes);
+api.route('/cargos', cargosRoutes);
+api.route('/recursos', recursosRoutes);
+api.route('/proyectos', proyectosRoutes);
+api.route('/proyectos', projectFilesRoutes);
+api.route('/clientes', clientesRoutes);
+api.route('/tipos-actividad', tiposActividadRoutes);
+api.route('/asignaciones', asignacionesRoutes);
+api.route('/actividades', actividadesRoutes);
+api.route('/materiales', materialesRoutes);
+api.route('/materiales-catalogo', materialesCatalogoRoutes);
+api.route('/etiquetas', etiquetasRoutes);
+api.route('/planning', planningRoutes);
+api.route('/usuarios', usuariosRoutes);
+api.route('/auditoria', auditoriaRoutes);
+api.route('/reportes', reportesRoutes);
 
-// ============================================
-// ERROR HANDLING
-// ============================================
+app.route('/api', api);
+
 app.notFound((c) => {
   return c.json({ error: 'Not Found', path: c.req.url }, 404);
 });
@@ -106,13 +99,10 @@ app.onError((err, c) => {
   return c.json({ error: 'Internal Server Error', message: err.message }, 500);
 });
 
-// ============================================
-// START SERVER
-// ============================================
 const port = parseInt(env.PORT);
 
-console.log(`🚀 Backend running on http://localhost:${port}`);
-console.log(`📊 Database: ${env.DATABASE_URL}`);
+console.log('Backend running on http://localhost:' + port);
+console.log('Database: ' + env.DATABASE_URL);
 
 serve({
   fetch: app.fetch,

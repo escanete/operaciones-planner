@@ -41,6 +41,7 @@ import { api } from '@/services/api';
 import { AssignmentFormDialog } from '@/components/planning/AssignmentFormDialog';
 import { ProjectGanttView } from '@/components/planning/VirtualizedTimeGrid';
 import { EtiquetaChips, EtiquetaSelector } from '@/components/etiquetas';
+import { ProjectFiles } from '@/components/ProjectFiles';
 import {
   useProyectoWBS,
   useRecursos,
@@ -397,7 +398,7 @@ export function ProjectDetailPage() {
         <MaterialesTab proyectoId={proyectoId} canManage={canWBS} />
       )}
 
-      {activeTab === 'documentos' && <DocumentosTab />}
+      {activeTab === 'documentos' && proyectoId && <DocumentosTab proyectoId={proyectoId} />}
 
       {activeTab === 'gantt' && (
         <GanttProyectoTab
@@ -1633,26 +1634,11 @@ function MaterialDialog({
 }
 
 // ============================================
-// PESTAÑA DOCUMENTOS (placeholder — módulo en diseño)
+// PESTAÑA DOCUMENTOS (SharePoint)
 // ============================================
 
-function DocumentosTab() {
-  return (
-    <div className="flex-1 overflow-y-auto p-4">
-      <Card>
-        <CardContent className="flex flex-col items-center gap-3 py-12 text-center">
-          <FileText className="h-10 w-10 text-muted-foreground" />
-          <p className="font-medium">Gestión de documentos del proyecto</p>
-          <p className="max-w-md text-sm text-muted-foreground">
-            Aquí podrás subir, descargar y organizar los documentos asociados al proyecto:
-            planos, informes, actas, protocolos y manuales. El módulo está en diseño y se
-            habilitará en una próxima actualización.
-          </p>
-          <Badge variant="outline" className="mt-1">Próximamente</Badge>
-        </CardContent>
-      </Card>
-    </div>
-  );
+function DocumentosTab({ proyectoId }: { proyectoId: string }) {
+  return <ProjectFiles proyectoId={proyectoId} />;
 }
 
 // ============================================

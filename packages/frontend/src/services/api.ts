@@ -48,6 +48,15 @@ export const api = {
     return handleResponse<T>(response);
   },
 
+  async upload<T>(path: string, formData: FormData): Promise<T> {
+    const response = await fetch(`${API_BASE}${path}`, {
+      method: 'POST',
+      credentials: 'include',
+      body: formData,
+    });
+    return handleResponse<T>(response);
+  },
+
   async put<T>(path: string, data: unknown): Promise<T> {
     const response = await fetch(`${API_BASE}${path}`, {
       method: 'PUT',

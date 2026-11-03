@@ -27,6 +27,7 @@ import { reportesRoutes } from './routes/reportes.js';
 import { healthRoutes } from './routes/health.js';
 import { mcpRoutes } from './routes/mcp.js';
 import { msgraphRoutes } from './routes/msgraph-auth.js';
+import { zohoRoutes } from './routes/zoho-auth.js';
 import { projectFilesRoutes } from './routes/project-files.js';
 
 const app = new Hono();
@@ -51,9 +52,10 @@ app.use('*', errorHandler());
 app.route('/api/health', healthRoutes);
 app.route('/api/mcp', mcpRoutes);
 
-// IMPORTANTE: /api/auth/msgraph debe ir ANTES de /api/auth, porque
+// IMPORTANTE: /api/auth/msgraph y /api/auth/zoho deben ir ANTES de /api/auth, porque
 // Better-Auth captura todo /api/auth/* y respondería 404 a estas rutas.
 app.route('/api/auth/msgraph', msgraphRoutes);
+app.route('/api/auth/zoho', zohoRoutes);
 app.route('/api/auth', authRoutes);
 
 /* ============================================================

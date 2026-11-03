@@ -50,7 +50,7 @@ export const env = {
     process.env.MS_GRAPH_SITE_URL ?? 'https://scadatech.sharepoint.com/sites/ScadatechRecursos',
   MS_GRAPH_DRIVE_NAME: process.env.MS_GRAPH_DRIVE_NAME ?? 'Documentos compartidos',
   MS_GRAPH_FOLDER_ROOT: process.env.MS_GRAPH_FOLDER_ROOT ?? 'Operaciones/Planner_Proyectos',
-  /** Permisos delegados solicitados al usuario */
+  /** Microsoft Graph / SharePoint */
   MS_GRAPH_SCOPES:
     process.env.MS_GRAPH_SCOPES ??
     'https://graph.microsoft.com/Files.ReadWrite.All https://graph.microsoft.com/Sites.ReadWrite.All https://graph.microsoft.com/Calendars.ReadWrite https://graph.microsoft.com/User.Read offline_access',
@@ -58,6 +58,13 @@ export const env = {
   MS_GRAPH_TIMEZONE: process.env.MS_GRAPH_TIMEZONE ?? 'America/Santiago',
   /** Sincronización automática de asignaciones con Outlook */
   MS_GRAPH_CALENDAR_SYNC: process.env.MS_GRAPH_CALENDAR_SYNC !== 'false',
+
+  /** Zoho Projects */
+  ZOHO_DOMAIN: process.env.ZOHO_DOMAIN ?? 'com',
+  ZOHO_CLIENT_ID: process.env.ZOHO_CLIENT_ID ?? '',
+  ZOHO_CLIENT_SECRET: process.env.ZOHO_CLIENT_SECRET ?? '',
+  ZOHO_REDIRECT_URI: process.env.ZOHO_REDIRECT_URI ?? `${BETTER_AUTH_URL}/api/auth/zoho/callback`,
+  ZOHO_SCOPES: process.env.ZOHO_SCOPES ?? 'ZohoProjects.projects.ALL,ZohoProjects.tasks.ALL,ZohoProjects.users.ALL,ZohoProjects.portal.ALL',
   /**
    * Cómo conecta cada usuario su cuenta de Microsoft:
    * - device: código de dispositivo (funciona con HTTP en red interna, sin redirect URI)

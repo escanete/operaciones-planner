@@ -19,11 +19,12 @@ export const RETURN_COOKIE = 'op_msgraph_return';
 
 const NO_CONECTADO = 'MSGRAPH_NOT_CONNECTED';
 
-/** Secure solo cuando el redirect registrado en Azure es https; si no,
- *  el navegador descartaría la cookie en despliegues http internos. */
+/** Secure solo cuando el frontend se sirve por https; si no, el navegador
+ *  descartaría la cookie en despliegues http de red interna. */
 export function cookieSecure(): boolean {
   try {
-    return new URL(env.MS_GRAPH_REDIRECT_URI).protocol === 'https:';
+    const origen = env.FRONTEND_URL.split(',')[0].trim();
+    return new URL(origen).protocol === 'https:';
   } catch {
     return false;
   }

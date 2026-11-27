@@ -109,7 +109,7 @@ El script pregunta por la connection string, la URL de Vercel y la contraseña d
 
 ### 3. Importar el repo en Vercel
 
-1. <https://vercel.com/new> → importa `https://github.com/estebancaneteb-9760/operaciones-planner`.
+1. <https://vercel.com/new> → importa `https://github.com/escanete/operaciones-planner`.
 2. Vercel detecta `vercel.json`: compila el frontend y genera el cliente Prisma para Postgres automáticamente. No cambies el *Root Directory*.
 3. En *Settings → Environment Variables* carga (para Production, Preview y Development):
 

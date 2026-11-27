@@ -10,7 +10,8 @@ const extraOrigins = env.TRUSTED_ORIGINS.split(',')
 
 export const auth = betterAuth({
   database: prismaAdapter(prisma, {
-    provider: 'sqlite',
+    // El adaptador debe conocer el motor para generar IDs y consultas acordes.
+    provider: env.DATABASE_PROVIDER === 'postgresql' ? 'postgresql' : 'sqlite',
   }),
   secret: env.BETTER_AUTH_SECRET,
   baseURL: env.BETTER_AUTH_URL,

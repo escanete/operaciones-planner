@@ -71,30 +71,66 @@ pnpm --filter frontend dev
 ```
 operaciones-planner/
 ├── start.bat              ← Doble clic para iniciar
+├── api/                   ← Función serverless (Vercel) que expone la API Hono
+├── vercel.json            ← Configuración de build + routing en Vercel
 ├── packages/
 │   ├── backend/           # API REST (Hono + Prisma)
 │   ├── frontend/          # React App (Vite + Tailwind)
 │   └── shared/            # Tipos TypeScript compartidos
 ├── data/
-│   └── dev.db             # Base de datos SQLite
+│   └── dev.db             # Base de datos SQLite (local)
 └── scripts/
-    └── migrate-to-cloud.ps1  # Para migrar a Vercel/Neon
+    ├── setup-cloud.ps1    ← Migrar/llenar Neon y preparar variables de Vercel
+    └── migrate-to-cloud.ps1 (script histórico, NO usar)
 ```
 
 ---
 
-## ☁️ Migración a la Nube (Cuando esté listo)
+## ☁️ Maqueta en la nube gratis (Vercel + Neon)
 
-Cuando quieras publicar a producción:
+La misma aplicación se publica sin servidor propio: Vercel sirve el frontend y la API (Hono), y Neon aporta PostgreSQL en plan gratuito.
+
+### 1. Base de datos Neon
+
+1. Crea un proyecto en <https://neon.tech> (plan Free).
+2. Copia la **connection string pooled** (`postgresql://...`) de la sección *Connection Details*.
+
+### 2. Preparar la BD desde tu PC
 
 ```powershell
-.\scripts\migrate-to-cloud.ps1
+.\scripts\setup-cloud.ps1
 ```
 
-Esto configurará:
-- Base de datos PostgreSQL en Neon
-- Deploy en Vercel
-- Variables de entorno de producción
+El script pregunta por la connection string, la URL de Vercel y la contraseña del admin; aplica las migraciones de `prisma/postgres`, carga datos **ficticios** de demostración y restaura el cliente Prisma SQLite local. Imprime el `BETTER_AUTH_SECRET` generado: cópialo.
+
+> Los datos del seed son inventados (cliente, personas y proyectos “Demo”). No se suben datos reales de la empresa.
+
+### 3. Importar el repo en Vercel
+
+1. <https://vercel.com/new> → importa `https://github.com/Kohwal/operaciones-planner`.
+2. Vercel detecta `vercel.json`: compila el frontend y genera el cliente Prisma para Postgres automáticamente. No cambies el *Root Directory*.
+3. En *Settings → Environment Variables* carga (para Production, Preview y Development):
+
+| Variable | Valor |
+|---|---|
+| `DATABASE_URL` | Connection string pooled de Neon |
+| `BETTER_AUTH_SECRET` | El que imprimió `setup-cloud.ps1` (64 caracteres) |
+| `BETTER_AUTH_URL` | `https://<tu-proyecto>.vercel.app` |
+| `CORS_ORIGIN` | `https://<tu-proyecto>.vercel.app` |
+| `TRUSTED_ORIGINS` | `https://<tu-proyecto>.vercel.app` |
+| `FRONTEND_URL` | `https://<tu-proyecto>.vercel.app` |
+| `NODE_ENV` | `production` |
+
+4. Deploy. La URL pública será `https://<tu-proyecto>.vercel.app`.
+
+### 4. Probar la maqueta
+
+- Usuario: `admin@operaciones.local`
+- Contraseña: la elegida en el script (por defecto `admin123`)
+
+Si cambias las variables después del primer deploy, haz **Redeploy**. Para volver a cargar datos demo ejecuta otra vez `setup-cloud.ps1` (es idempotente).
+
+> La integración con SharePoint/Outlook y Zoho no se configura en la maqueta: esas funciones requieren credenciales corporativas y solo se usan en el servidor interno. El resto (login, grid, Gantt, WBS, CRUD y reportes) funciona igual que en local.
 
 ---
 

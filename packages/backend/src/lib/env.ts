@@ -2,6 +2,10 @@ import 'dotenv/config';
 
 const BETTER_AUTH_URL = process.env.BETTER_AUTH_URL ?? 'http://localhost:3001';
 const NODE_ENV = process.env.NODE_ENV ?? 'development';
+const DATABASE_URL = process.env.DATABASE_URL ?? 'file:./data/dev.db';
+/** SQLite en local/Docker; PostgreSQL (Neon) en el despliegue cloud. */
+const DATABASE_PROVIDER =
+  process.env.DATABASE_PROVIDER ?? (DATABASE_URL.startsWith('postgres') ? 'postgresql' : 'sqlite');
 
 /**
  * Limpia un valor de entorno: quita espacios y comillas accidentales.
@@ -28,7 +32,8 @@ const MS_GRAPH_REDIRECT_URI =
   process.env.MS_GRAPH_REDIRECT_URI ?? `${BETTER_AUTH_URL}/api/auth/msgraph/callback`;
 
 export const env = {
-  DATABASE_URL: process.env.DATABASE_URL ?? 'file:./data/dev.db',
+  DATABASE_URL,
+  DATABASE_PROVIDER,
   BETTER_AUTH_SECRET:
     process.env.BETTER_AUTH_SECRET ?? 'dev-secret-change-in-production-please-64-chars-minimo',
   BETTER_AUTH_URL,

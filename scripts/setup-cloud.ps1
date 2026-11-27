@@ -1,4 +1,4 @@
-# =============================================================
+﻿# =============================================================
 # Preparar Neon PostgreSQL para el deploy en Vercel
 # Ejecutar desde la raíz del repo: .\scripts\setup-cloud.ps1
 #

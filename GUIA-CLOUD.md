@@ -63,7 +63,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\setup-cloud.ps1
 ## PASO 3 — Publicar en Vercel
 
 1. Entra a **https://vercel.com/new** e inicia sesión con tu cuenta de GitHub.
-2. Si es la primera vez, autoriza a Vercel para ver tu cuenta `Kohwal`.
+2. Si es la primera vez, autoriza a Vercel para ver tu cuenta `estebancaneteb-9760`.
 3. Haz clic en **Add New... → Project**.
 4. Busca `operaciones-planner` y haz clic en **Import**.
 5. **No cambies el Root Directory** (debe quedar `./`). El Framework puede quedar en *Other*.
@@ -101,7 +101,7 @@ Verás proyectos, personas y asignaciones **de ejemplo** (todos inventados, con 
 | Página en blanco o error 404 | Revisa que las 7 variables estén en Vercel y haz **Deployments → ... → Redeploy** |
 | No entra con el usuario | Revisa `BETTER_AUTH_URL` (debe ser exactamente tu URL de Vercel) y `BETTER_AUTH_SECRET` |
 | Error 500 al cargar datos | Revisa `DATABASE_URL` (debe ser la pooled) y que el Paso 2 terminó con ✅ |
-| No aparece el repo en Vercel | En Vercel → *Account Settings → GitHub*, autoriza la organización/cuenta `Kohwal` |
+| No aparece el repo en Vercel | En Vercel → *Account Settings → GitHub*, autoriza la cuenta `estebancaneteb-9760` |
 | Quieres cambiar la contraseña demo | Vuelve a ejecutar el script del Paso 2 con otra contraseña |
 
 ---

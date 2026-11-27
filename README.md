@@ -90,6 +90,8 @@ operaciones-planner/
 
 La misma aplicación se publica sin servidor propio: Vercel sirve el frontend y la API (Hono), y Neon aporta PostgreSQL en plan gratuito.
 
+👉 **Si es tu primera vez, sigue primero la [guía sin conocimientos técnicos](GUIA-CLOUD.md).** El resto de esta sección es el detalle técnico.
+
 ### 1. Base de datos Neon
 
 1. Crea un proyecto en <https://neon.tech> (plan Free).

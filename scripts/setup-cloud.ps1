@@ -24,7 +24,12 @@ if (-not $DatabaseUrl.StartsWith('postgresql://') -and -not $DatabaseUrl.StartsW
 }
 
 if ([string]::IsNullOrWhiteSpace($VercelUrl)) {
-    $VercelUrl = Read-Host 'URL de Vercel (https://xxx.vercel.app)'
+    # Todavía no existe la URL: el script solo la usa para mostrar referencia.
+    $VercelUrl = 'https://<tu-proyecto>.vercel.app'
+    Write-Host '(Aún no tienes URL de Vercel; uso un marcador de posición solo como referencia.)' -ForegroundColor Yellow
+}
+if ($DatabaseUrl -notmatch 'pooler') {
+    Write-Host '⚠️  Asegúrate de copiar la connection string POOLED de Neon (la que contiene "pooler" en el host).' -ForegroundColor Yellow
 }
 if ([string]::IsNullOrWhiteSpace($AdminPassword)) {
     $AdminPassword = Read-Host 'Contraseña del usuario demo admin (enter = admin123)'
